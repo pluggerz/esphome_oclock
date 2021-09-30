@@ -21,6 +21,8 @@ from esphome import loader
 import sys
 import json
 
+source_files = ["hoi.c"]
+
 oclock_ns = cg.esphome_ns.namespace("oclock_stub")
 
 OClockStubController = oclock_ns.class_("OClockStubController", cg.Component)

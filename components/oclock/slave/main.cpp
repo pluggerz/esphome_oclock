@@ -1,10 +1,10 @@
 #include "oclock.h"
+#ifdef SLAVE_MODE
 
 #include "pins.h"
 #include "uart.h"
 
 
-#ifdef SLAVE_MODE
 
 UART uart(RS485_DE_PIN, RS485_RE_PIN);
 

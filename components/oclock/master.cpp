@@ -4,10 +4,14 @@
 
 #include "master.h"
 #include "uart.h"
+#include "shared/rs485.h"
 
 #include "pins.h"
 
-UART uart(RS485_DE_PIN, RS485_RE_PIN);
+RS485 rs485(RS485_DE_PIN, RS485_RE_PIN)
+
+// UART uart(RS485_DE_PIN, RS485_RE_PIN);
+
 oclock::Master oclock::master;
 bool scanForError = false;
 int slaveIdCounter = -2;
