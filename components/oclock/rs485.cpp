@@ -1,57 +1,8 @@
+#include "rs485.h"
 #include "oclock.h"
+#include "Arduino.h"
 
-#include "uart.h"
-
-// extern uart::UARTComponent *uart_uartcomponent;
-
-#define WRITE Serial.write
-// #define WRITE uart_uartcomponent->write
-
-#ifdef MASTER_MODE
-
-std::ostream &operator<<(std::ostream &os, MsgType ethertype)
-{
-    switch (ethertype)
-    {
-    case MsgType::MSG_ID_RESET:
-        return os << "MSG_ID_RESET";
-    case MsgType::MSG_ID_START:
-        return os << "MSG_ID_START";
-    case MsgType::MSG_ID_ACCEPT:
-        return os << "MSG_ID_ACCEPT";
-    case MsgType::MSG_ID_DONE:
-        return os << "MSG_ID_DONE";
-    case MsgType::MSG_CALIBRATE_START:
-        return os << "MSG_CALIBRATE_START";
-    case MsgType::MSG_CALIBRATE_END:
-        return os << "MSG_CALIBRATE_END";
-    case MsgType::MSG_POS_REQUEST:
-        return os << "MSG_POS_REQUEST";
-    case MsgType::MSG_BEGIN_KEYS:
-        return os << "MSG_BEGIN_KEYS";
-    case MsgType::MSG_SEND_KEYS:
-        return os << "MSG_SEND_KEYS";
-    case MsgType::MSG_END_KEYS:
-        return os << "MSG_END_KEYS";
-    case MsgType::MSG_COLOR:
-        return os << "MSG_COLOR";
-    case MsgType::MSG_COLOR_ANIMATION:
-        return os << "MSG_COLOR_ANIMATION";
-        // omit default case to trigger compiler warning for missing cases
-    };
-    return os << "MsgType@" << static_cast<std::uint16_t>(ethertype);
-}
-
-std::ostream &operator<<(std::ostream &out, const Cmd &c)
-{
-    out << (c.mode & CmdEnum::ABSOLUTE ? " abs " : " rel ")
-        << (c.mode & CmdEnum::CLOCK_WISE ? " --> " : " <-- ") << std::dec << (int)c.steps << " "
-        << "speed[" << (int)c.speed << "] "
-        << "raw[0x" << std::hex << c.asRaw() << "] ";
-    return out;
-}
-
-#endif
+// Helper class to calucalte CRC8
 
 class CRC8
 {
@@ -77,8 +28,11 @@ public:
 
 // based on: http://www.gammon.com.au/forum/?id=11428
 
-class RS485
+#define WRITE Serial.write
+
+class RS485Protocol
 {
+public:
     enum
     {
         STX = '\2', // start of text
@@ -113,28 +67,44 @@ class RS485
 
 public:
     // constructor
-    RS485(const byte bufferSize) : data_(NULL),
-                                   bufferSize_(bufferSize)
+    RS485Protocol(const byte bufferSize) : data_(NULL),
+                                           bufferSize_(bufferSize)
     {
     }
 
     // destructor - frees memory used
-    ~RS485()
+    ~RS485Protocol()
     {
         stop();
     }
 
+    // reset to no incoming data (eg. after a timeout)
+    void reset()
+    {
+        haveSTX_ = false;
+        available_ = false;
+        inputPos_ = 0;
+        startTime_ = 0;
+    }
+
     // allocate memory for buf_
-    void begin();
+    void begin()
+    {
+        data_ = (byte *)malloc(bufferSize_);
+        reset();
+        errorCount_ = 0;
+    }
 
     // free memory in buf_
-    void stop();
+    void stop()
+    {
+        reset();
+        free(data_);
+        data_ = NULL;
+    }
 
     // handle incoming data, return true if packet ready
     bool update();
-
-    // reset to no incoming data (eg. after a timeout)
-    void reset();
 
     // send data
     void sendMsg(const byte *data, const byte length);
@@ -172,37 +142,12 @@ public:
         return haveSTX_;
     }
 
-}; // end of class RS485
-
-// allocate the requested buffer size
-void RS485::begin()
-{
-    data_ = (byte *)malloc(bufferSize_);
-    reset();
-    errorCount_ = 0;
-} // end of RS485::begin
-
-// get rid of the buffer
-void RS485::stop()
-{
-    reset();
-    free(data_);
-    data_ = NULL;
-} // end of RS485::stop
-
-// called after an error to return to "not in a packet"
-void RS485::reset()
-{
-    haveSTX_ = false;
-    available_ = false;
-    inputPos_ = 0;
-    startTime_ = 0;
-} // end of RS485::reset
+}; // end of class RS485Protocol
 
 // send a byte complemented, repeated
 // only values sent would be (in hex):
 //   0F, 1E, 2D, 3C, 4B, 5A, 69, 78, 87, 96, A5, B4, C3, D2, E1, F0
-void RS485::sendComplemented(const byte what)
+void RS485Protocol::sendComplemented(const byte what)
 {
     byte c;
 
@@ -217,7 +162,7 @@ void RS485::sendComplemented(const byte what)
 
 // send a message of "length" bytes (max 255) to other end
 // put STX at start, ETX at end, and add CRC
-void RS485::sendMsg(const byte *data, const byte length)
+void RS485Protocol::sendMsg(const byte *data, const byte length)
 {
     WRITE(STX); // STX
     for (byte i = 0; i < length; i++)
@@ -234,18 +179,19 @@ void RS485::sendMsg(const byte *data, const byte length)
 // You could implement a timeout by seeing if isPacketStarted() returns
 // true, and if too much time has passed since getPacketStartTime() time.
 
-bool RS485::update()
+bool RS485Protocol::update()
 {
     // no data? can't go ahead (eg. begin() not called)
-    if (data_ == NULL)  {
-        ESP_LOGCONFIG(TAG, "RS485: data_ == NULL !?");
+    if (data_ == NULL)
+    {
+        ESP_LOGD(TAG, "RS485: data_ == NULL !?");
         return false;
     }
-    auto available=Serial.available();
+    auto available = Serial.available();
     if (available == 0)
         return false;
-    
-    ESP_LOGCONFIG(TAG, "RS485: Serial.available() = %d", available);
+
+    ESP_LOGD(TAG, "RS485: Serial.available() = %d", available);
     while (Serial.available() > 0)
     {
         byte inByte = Serial.read();
@@ -253,7 +199,7 @@ bool RS485::update()
         {
 
         case STX: // start of text
-            ESP_LOGCONFIG(TAG, "RS485: received STX");
+            ESP_LOGD(TAG, "RS485: received STX");
             haveSTX_ = true;
             haveETX_ = false;
             inputPos_ = 0;
@@ -262,7 +208,7 @@ bool RS485::update()
             break;
 
         case ETX: // end of text (now expect the CRC check)
-            ESP_LOGCONFIG(TAG, "RS485: received ETX");
+            ESP_LOGD(TAG, "RS485: received ETX");
             haveETX_ = true;
             break;
 
@@ -270,17 +216,17 @@ bool RS485::update()
             // wait until packet officially starts
             if (!haveSTX_)
             {
-                ESP_LOGCONFIG(TAG, "RS485: ignoring %d (errorCount_=%d)", (int)inByte, errorCount_);
+                ESP_LOGD(TAG, "RS485: ignoring %d (errorCount_=%d)", (int)inByte, errorCount_);
                 break;
             }
-            ESP_LOGCONFIG(TAG, "RS485: received %d (errorCount=%d)", (int)inByte, errorCount_);
+            ESP_LOGD(TAG, "RS485: received %d (errorCount=%d)", (int)inByte, errorCount_);
 
             // check byte is in valid form (4 bits followed by 4 bits complemented)
             if ((inByte >> 4) != ((inByte & 0x0F) ^ 0x0F))
             {
-                ESP_LOGCONFIG(TAG, "RS485: invalid nibble !? (errorCount=%d)", errorCount_);
                 reset();
                 errorCount_++;
+                ESP_LOGD(TAG, "RS485: invalid nibble !? (errorCount=%d)", errorCount_);
                 break; // bad character
             }          // end if bad byte
 
@@ -307,6 +253,7 @@ bool RS485::update()
                 {
                     reset();
                     errorCount_++;
+                    ESP_LOGD(TAG, "RS485: bad crc !? (errorCount=%d)", errorCount_);
                     break; // bad crc
                 }          // end of bad CRC
 
@@ -321,6 +268,7 @@ bool RS485::update()
             {
                 reset(); // overflow, start again
                 errorCount_++;
+                ESP_LOGD(TAG, "RS485: overflow, start again !? (errorCount=%d)", errorCount_);
             }
 
             break;
@@ -329,76 +277,88 @@ bool RS485::update()
     }     // end of while incoming data
 
     return false; // not ready yet
-} // end of RS485::update
+} // end of RS485Protocol::update
 
-RS485 rs485(MAX_UART_MESSAGE_SIZE);
-
-void UART::send(const byte *bytes, const byte length)
+RS485::RS485(int de_pin, int re_pin) : de_pin_(de_pin),
+                                       re_pin_(re_pin),
+                                       protocol_(new RS485Protocol(64))
 {
-    rs485.sendMsg(bytes, length);
 }
 
-void UART::setup()
+#ifdef ESP8266
+bool org = true;
+#else
+bool org = false;
+#endif
+
+void RS485::startReceiving()
+{
+    ESP_LOGI(TAG, "RS485::startReceiving -> receiving = true");
+
+    // make sure we are done with sending
+    Serial.flush();
+
+    digitalWrite(de_pin_, org ? LOW : HIGH);
+    digitalWrite(re_pin_, LOW);
+
+    // ignore input
+    protocol_->reset();
+    receiving = true;
+}
+
+void RS485::startTransmitting()
+{
+    ESP_LOGI(TAG, "RS485::startTransmitting -> receiving = false");
+
+    digitalWrite(de_pin_, org ? HIGH : LOW);
+    digitalWrite(re_pin_, LOW);
+
+    protocol_->reset();
+
+    receiving = false;
+}
+
+void RS485::_send(const byte *bytes, const byte length)
+{
+    if (receiving)
+        startTransmitting();
+
+    protocol_->sendMsg(bytes, length);
+}
+
+void RS485::setup()
 {
     pinMode(de_pin_, OUTPUT);
     pinMode(re_pin_, OUTPUT);
-    
-    //digitalWrite(de_pin_, HIGH);
-    //digitalWrite(re_pin_, HIGH);
-    //delay(100);
 
     Serial.begin(speed);
-    rs485.begin();
-    
-    ESP_LOGI(TAG, "UART::setup %d baud (de_pin_=%d, re_pin_=%d)", speed,de_pin_, re_pin_);
+    protocol_->begin();
+
+    // initially we always listen
+    startReceiving();
+
+    ESP_LOGI(TAG, "UART::setup %d baud (de_pin_=%d, re_pin_=%d)", speed, de_pin_, re_pin_);
 }
 
-void UART::dump_config()
+void RS485::dump_config()
 {
     ESP_LOGCONFIG(TAG, "   UART:");
     ESP_LOGCONFIG(TAG, "      speed: %d baud", speed);
     ESP_LOGCONFIG(TAG, "      de_pin: %d", de_pin_);
     ESP_LOGCONFIG(TAG, "      re_pin: %d", re_pin_);
+    ESP_LOGCONFIG(TAG, "      receiving: %s", receiving ? "true" : "false");
+    ESP_LOGCONFIG(TAG, "      protocol.errorCount_: %d", protocol_->errorCount_);
 }
 
-void UART::loop(Micros now)
+void RS485::loop()
 {
     if (!receiving)
     {
         ESP_LOGI(TAG, "Not receiving !?");
         return;
     }
-    if (!rs485.update())
+    if (!protocol_->update())
         return;
 
-    // packet !
-    UartMessageHolder holder(rs485.getData(), rs485.getLength());
-    process(holder);
-}
-
-void UART::startTransmitting()
-{
-    ESP_LOGI(TAG, "UART::startTransmitting -> receiving = false");
-
-    digitalWrite(de_pin_, HIGH);
-    digitalWrite(re_pin_, LOW);
-
-    rs485.reset();
-    
-    receiving = false;
-}
-
-void UART::startReceiving()
-{
-    ESP_LOGI(TAG, "UART::startReceiving -> receiving = true");
-
-    // make sure we are done with sending
-    Serial.flush();
-
-    digitalWrite(de_pin_, LOW);
-    digitalWrite(re_pin_, LOW);
-
-    // ignore input
-    rs485.reset();
-    receiving = true;
+    process(protocol_->getData(), protocol_->getLength());
 }

@@ -1,5 +1,192 @@
 #pragma once
 
+#include "oclock.h"
+#include "rs485.h"
+
+#ifdef ESP8266
+#include <functional>
+#endif
+
+const int MAX_UART_MESSAGE_SIZE = 32;
+const int ALL_SLAVES = 32;
+
+enum MsgType
+{
+  MSG_ID_RESET = 0,
+  MSG_ID_START = 1,
+  MSG_ID_ACCEPT = 2,
+  MSG_ID_DONE = 3,
+  MSG_POS_REQUEST = 4,
+  MSG_BEGIN_KEYS = 5,
+  MSG_SEND_KEYS = 6,
+  MSG_END_KEYS = 7,
+  MSG_CALIBRATE_START = 8,
+  MSG_CALIBRATE_END = 9,
+  // MSG_LED = 10,
+  MSG_COLOR = 11,
+  MSG_COLOR_ANIMATION = 12,
+};
+
+struct UartMessage
+{
+private:
+  uint8_t srcId;
+  uint8_t msgType;
+  uint8_t dstId;
+
+public:
+  int getSrcId() const { return srcId; }
+  MsgType getMsgType() const { return (MsgType)msgType; }
+  int getDstId() const { return dstId; }
+
+  UartMessage(uint8_t srcId, MsgType msgType) : srcId(srcId), msgType((u8)msgType), dstId(ALL_SLAVES) {}
+  UartMessage(uint8_t srcId, MsgType msgType, uint8_t dstId) : srcId(srcId), msgType((uint8_t)msgType), dstId(dstId) {}
+
+  MsgType getMessageType() const
+  {
+    return (MsgType)msgType;
+  }
+} __attribute__((packed, aligned(1)));
+
+struct UartAcceptMessage : public UartMessage
+{
+private:
+  uint8_t assignedId;
+
+public:
+  int getAssignedId() const { return assignedId; }
+
+  UartAcceptMessage(uint8_t srcId, uint8_t assignedId) : UartMessage(srcId, MSG_ID_ACCEPT), assignedId(assignedId) {}
+} __attribute__((packed, aligned(1)));
+
+struct UartPosRequest : public UartMessage
+{
+private:
+  uint16_t pos1;
+  uint16_t pos2;
+
+public:
+  uint16_t getPos1() const { return pos1; }
+  uint16_t getPos2() const { return pos2; }
+
+  UartPosRequest() : UartMessage(-1, MSG_POS_REQUEST, 0), pos1(0), pos2(0) {}
+  UartPosRequest(u8 srcId, u8 dstId, uint16_t pos1, uint16_t pos2) : UartMessage(srcId, MSG_POS_REQUEST, dstId), pos1(pos1), pos2(pos2) {}
+} __attribute__((packed, aligned(1)));
+
+class InteropStringifier
+{
+  static const char *asString(const MsgType &type)
+  {
+    switch (type)
+    {
+    case MSG_ID_RESET:
+      return ("MSG_ID_RESET");
+    case MSG_ID_START:
+      return ("MSG_ID_START");
+    case MSG_ID_ACCEPT:
+      return ("MSG_ID_ACCEPT");
+    case MSG_ID_DONE:
+      return ("MSG_ID_DONE");
+    case MSG_POS_REQUEST:
+      return ("MSG_POS_REQUEST");
+    case MSG_BEGIN_KEYS:
+      return ("MSG_BEGIN_KEYS");
+    case MSG_SEND_KEYS:
+      return ("MSG_SEND_KEYS");
+    case MSG_END_KEYS:
+      return ("MSG_END_KEYS");
+    case MSG_CALIBRATE_START:
+      return ("MSG_CALIBRATE_START");
+    case MSG_CALIBRATE_END:
+      return ("MSG_CALIBRATE_END");
+    case MSG_COLOR:
+      return ("MSG_COLOR");
+    case MSG_COLOR_ANIMATION:
+      return ("MSG_COLOR_ANIMATION");
+    default:
+      return ("MSG_???");
+    }
+  }
+
+  static String asId(int id)
+  {
+    if (id == ALL_SLAVES)
+      return "ALL";
+    if (id == 0xFF)
+      return "MASTER";
+    return String("S") + (id >> 1);
+  }
+
+  static String ofMessage(const UartMessage *m)
+  {
+    return String("srcId[") + asId(m->getSrcId()) + "] msgType[" + asString(m->getMsgType()) + "] dstId[" + asId(m->getDstId()) + "]";
+  }
+
+  static String ofPosRequest(const UartPosRequest *m)
+  {
+    return ofMessage(m) + " pos1[" + m->getPos1() + "] pos2[" + m->getPos2() + "]";
+  }
+
+public:
+  static String of(const UartMessage &m)
+  {
+    switch (m.getMsgType())
+    {
+    case MSG_POS_REQUEST:
+      return ofPosRequest((const UartPosRequest *)&m);
+    default:
+      return ofMessage(&m);
+    }
+  }
+};
+
+#ifdef ESP8266
+typedef std::function<bool(const UartMessage *msg)> InteropRS485ReceiverFuncPtr;
+#else
+typedef bool (*InteropRS485ReceiverFuncPtr)(const UartMessage *msg);
+#endif
+
+class InteropRS485 : public RS485
+{
+private:
+  int owner_id_{-1};
+  InteropRS485ReceiverFuncPtr listener_{nullptr};
+
+protected:
+  void process(const byte *bytes, const byte length) override
+  {
+    auto msg = (const UartMessage *)bytes;
+    if (msg->getSrcId() == owner_id_)
+    {
+      ESP_LOGI(TAG, "ignored (mine): %s", InteropStringifier::of(*msg).c_str());
+    }
+    else
+    {
+      ESP_LOGI(TAG, "process: %s", InteropStringifier::of(*msg).c_str());
+      bool accepted = listener_ ? listener_(msg) : false;
+      if (!accepted)
+        ESP_LOGW(TAG, "ignored: %s", InteropStringifier::of(*msg).c_str());
+    }
+  }
+
+public:
+  InteropRS485(int de_pin, int re_pin) : RS485(de_pin, re_pin) {}
+
+  void setOwnerId(int id) { owner_id_ = id; }
+
+  template <class M>
+  void send(const M &msg)
+  {
+    ESP_LOGI(TAG, "send: %s", InteropStringifier::of(msg).c_str());
+    _send(msg);
+  }
+
+  void set_listener(InteropRS485ReceiverFuncPtr listener)
+  {
+    listener_ = listener;
+  }
+};
+
 #ifdef FSfdsFADSfadsfds
 
 #include "oclock.h"
@@ -109,61 +296,9 @@ public:
 std::ostream &operator<<(std::ostream &out, const Cmd &c);
 #endif
 
-const int MAX_UART_MESSAGE_SIZE = 32;
-const int ALL_SLAVES = 32;
-
-enum MsgType
-{
-  MSG_ID_RESET = 0,
-  MSG_ID_START = 1,
-  MSG_ID_ACCEPT = 2,
-  MSG_ID_DONE = 3,
-  MSG_POS_REQUEST = 4,
-  MSG_BEGIN_KEYS = 5,
-  MSG_SEND_KEYS = 6,
-  MSG_END_KEYS = 7,
-  MSG_CALIBRATE_START = 8,
-  MSG_CALIBRATE_END = 9,
-  // MSG_LED = 10,
-  MSG_COLOR = 11,
-  MSG_COLOR_ANIMATION = 12,
-};
-
 #ifdef MASTER_MODE
 std::ostream &operator<<(std::ostream &os, MsgType ethertype);
 #endif
-
-struct UartMessage
-{
-private:
-  uint8_t srcId;
-  uint8_t msgType;
-  uint8_t dstId;
-
-public:
-  int getSrcId() const { return srcId; }
-  MsgType getMsgType() const { return (MsgType)msgType; }
-  int getDstId() const { return dstId; }
-
-  UartMessage(uint8_t srcId, MsgType msgType) : srcId(srcId), msgType((u8)msgType), dstId(ALL_SLAVES) {}
-  UartMessage(uint8_t srcId, MsgType msgType, uint8_t dstId) : srcId(srcId), msgType((uint8_t)msgType), dstId(dstId) {}
-
-  MsgType getMessageType() const
-  {
-    return (MsgType)msgType;
-  }
-} __attribute__((packed, aligned(1)));
-
-struct UartAcceptMessage : public UartMessage
-{
-private:
-  uint8_t assignedId;
-
-public:
-  int getAssignedId() const { return assignedId; }
-
-  UartAcceptMessage(uint8_t srcId, uint8_t assignedId) : UartMessage(srcId, MSG_ID_ACCEPT), assignedId(assignedId) {}
-} __attribute__((packed, aligned(1)));
 
 struct UartColorMessage : public UartMessage
 {
@@ -229,20 +364,6 @@ public:
   {
     return Cmd(cmds[idx]);
   }
-} __attribute__((packed, aligned(1)));
-
-struct UartPosRequest : public UartMessage
-{
-private:
-  uint16_t pos1;
-  uint16_t pos2;
-
-public:
-  uint16_t getPos1() const { return pos1; }
-  uint16_t getPos2() const { return pos2; }
-
-  UartPosRequest() : UartMessage(-1, MSG_POS_REQUEST, 0), pos1(0), pos2(0) {}
-  UartPosRequest(u8 srcId, u8 dstId, uint16_t pos1, uint16_t pos2) : UartMessage(srcId, MSG_POS_REQUEST, dstId), pos1(pos1), pos2(pos2) {}
 } __attribute__((packed, aligned(1)));
 
 /***

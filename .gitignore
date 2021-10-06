@@ -135,3 +135,6 @@ dmypy.json
 
 # platform io
 .pio/
+
+# vscode
+.vscode/
