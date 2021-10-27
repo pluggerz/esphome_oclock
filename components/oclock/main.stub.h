@@ -6,90 +6,93 @@
 
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
+#include "esphome/components/number/number.h"
 
 #include "master.h"
 
-namespace esphome
+namespace oclock
 {
-    namespace oclock_stub
+    
+
+    class OClockStubController : public Component
     {
-        class OClockStubController : public Component
+    protected:
+        const int count_start_;
+        HighFrequencyLoopRequester high_freq_;
+
+        long t0;       // 'start'
+        long t1;       // 'track the seconds'
+        long hits{0L}; // all hits
+        bool loop_master_{false};
+        long count_{0};
+        bool stats{false};
+
+    public:
+        OClockStubController(int count_start) : count_start_(count_start)
         {
-        protected:
-            const int countStart{-1};
-            HighFrequencyLoopRequester high_freq_;
+            t1 = t0 = ::millis();
+        }
 
-            long t0;       // 'start'
-            long t1;       // 'track the seconds'
-            long hits{0L}; // all hits
-            bool loop_master_{false};
-            long count_{0};
-            bool stats{false};
-
-        public:
-            OClockStubController()
+        void setup()
+        {
+            ESP_LOGCONFIG(TAG, "OClockStub");
+            // make sure we get all the attention!
+            high_freq_.start();
+            if (count_start_ == -1)
             {
-                t1 = t0 = millis();
+                oclock::master.setup();
+                loop_master_ = true;
             }
+        }
 
-            void setup()
+        void loop()
+        {
+            ++hits;
+            auto t = ::millis();
+            if (t - t1 > 1000)
             {
-                ESP_LOGCONFIG(TAG, "OClockStub");
-                // make sure we get all the attention!
-                high_freq_.start();
-                if (countStart == -1)
-                {
-                    oclock::master.setup();
-                    loop_master_ = true;
-                }
+                auto diff = t - t0;
+                auto secs = ((double)diff / 1000.0);
+                auto perSec = (double)hits / secs;
+                if (stats)
+                    ESP_LOGI(TAG, "OClockStubController::loop %f per sec (total: %f) %s", perSec, secs,
+                             HighFrequencyLoopRequester::is_high_frequency() ? "is_high_frequency" : "NOT is_high_frequency");
+                t1 = t;
             }
-
-            void loop()
+            if (t - t0 > 10000)
             {
-                ++hits;
-                auto t = millis();
-                if (t - t1 > 1000)
-                {
-                    auto diff = t - t0;
-                    auto secs = ((double)diff / 1000.0);
-                    auto perSec = (double)hits / secs;
-                    if (stats)
-                        ESP_LOGI(TAG, "OClockStubController::loop %f per sec (total: %f) %s", perSec, secs,
-                                 HighFrequencyLoopRequester::is_high_frequency() ? "is_high_frequency" : "NOT is_high_frequency");
-                    t1 = t;
-                }
-                if (t - t0 > 10000)
-                {
-                    hits = 0;
-                    t0 = t1 = t;
-                    if (stats)
-                        ESP_LOGI(TAG, "OClockStubController::loop RESET stats");
-                }
-
-                if (loop_master_)
-                    oclock::master.loop();
+                hits = 0;
+                t0 = t1 = t;
+                if (stats)
+                    ESP_LOGI(TAG, "OClockStubController::loop RESET stats");
             }
 
-            void set_time(esphome::time::RealTimeClock* time) { 
-                oclock::master.set_time(time);
-            }
+            if (loop_master_)
+                oclock::master.loop();
+        }
 
-            void dump_config()
+#ifdef USE_TIME
+        void set_time(esphome::time::RealTimeClock *time)
+        {
+            oclock::time_tracker::realTimeTracker.set(time);
+        }
+#endif
+
+        void dump_config()
+        {
+            count_++;
+            ESP_LOGCONFIG(TAG, "STUB: count=%d (count_start_=%d)", count_, count_start_);
+
+            if (count_ == count_start_ && loop_master_ == false)
             {
-                count_++;
-                ESP_LOGCONFIG(TAG, "STUB: count=%d (countStart=%d)", count_, countStart);
-
-                if (count_ == countStart && loop_master_ == false)
-                {
-                    ESP_LOGCONFIG(TAG, "STUB: activating master!");
-                    oclock::master.setup();
-                    loop_master_ = true;
-                }
-                oclock::master.dump_config();
+                ESP_LOGCONFIG(TAG, "STUB: activating master!");
+                oclock::master.setup();
+                loop_master_ = true;
             }
+            oclock::master.dump_config();
+        }
 
-        protected:
-        };
-    } // namespace oclock
-} // namespace esphome
+    protected:
+    };
+} // namespace oclock
 #endif

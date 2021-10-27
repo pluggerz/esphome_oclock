@@ -1,9 +1,9 @@
 #pragma once
 
-#ifdef AVR
+#include "Arduino.h"
+
 #include <FastGPIO.h>
 #define USE_FAST_GPIO
-#endif
 
 typedef unsigned long Micros;
 
@@ -13,13 +13,25 @@ protected:
   const int number_of_steps;
   int step_number = 0; // which step the motor is on
   bool ghost = false;
+  int offset_steps_{0};
 
 public:
-  int offset_steps;
-  Stepper(int number_of_steps, int offset_steps) : 
-    number_of_steps(number_of_steps), 
-    offset_steps(offset_steps) 
-    {}
+  Stepper(int number_of_steps) : number_of_steps(number_of_steps)
+  {
+  }
+
+  int get_offset_steps() const
+  {
+    return offset_steps_;
+  }
+
+  bool set_offset_steps(int value)
+  {
+    if (offset_steps_ == value)
+      return false;
+    offset_steps_ = value;
+    return true;
+  }
 
   int range(int v) const
   {
@@ -33,41 +45,49 @@ public:
     }
     return v;
   }
-  void setGhosting(boolean _ghost) { ghost = _ghost; }
+  void setGhosting(bool _ghost) { ghost = _ghost; }
 
-  int ticks() const { return range(step_number - offset_steps); }
+  int ticks() const { return range(step_number - offset_steps_); }
 
   virtual bool tryToStep(Micros now) = 0;
   virtual int setSpeed(int speedInRevsPerMinute) = 0;
   virtual int findZero() = 0;
+  virtual void sync() = 0;
 };
 
 template <uint8_t stepPin, uint8_t dirPin, uint8_t centerPin>
-class StepperImpl : public Stepper
+class StepperImpl final : public Stepper
 {
-  const int pulseTime = 200;
-  int direction = 0;
+  const Micros pulseTime = 5;
+  int8_t direction = 0;
   Micros step_delay = 100;   // delay between steps, in micros, based on speed
   Micros last_step_time = 0; // time stamp in micros of when the last step was taken
-  bool pulsing = false;      // currently pulsing
-  int speedInRevsPerMinute = 1;
+  Micros real_step_time = 0;
+  bool pulsing = false; // currently pulsing
+  int8_t speedInRevsPerMinute = 1;
 
 public:
-  StepperImpl(int number_of_steps, int offset_steps)
-      : Stepper(number_of_steps, offset_steps)
+  StepperImpl(int number_of_steps)
+      : Stepper(number_of_steps)
   {
+  }
+
+  bool active() const
+  {
+    // if last 10ms there was no interaction than we are 'quit'
+    return millis() - real_step_time / 1000 < 500;
   }
 
   void calibrate()
   {
-    step_number = number_of_steps / 2 + offset_steps;
+    step_number = number_of_steps / 2 + offset_steps_;
   }
 
   int findZero() override
   {
 
 #ifdef USE_FAST_GPIO
-    auto isCenterPinLow= !FastGPIO::Pin<centerPin>::isInputHigh();
+    auto isCenterPinLow = !FastGPIO::Pin<centerPin>::isInputHigh();
 #else
     auto isCenterPinLow = digitalRead(centerPin) == LOW;
 #endif
@@ -87,7 +107,7 @@ public:
       step_number = 0;
       return 0;
     }
-    tryToStep(micros());
+    tryToStep(::micros());
     return 1;
   }
 
@@ -121,21 +141,30 @@ public:
     digitalWrite(stepPin, LOW);
   }
 
-  int getSpeedInRevsPerMinute() const
+  inline int getSpeedInRevsPerMinute() const
   {
     return speedInRevsPerMinute;
   }
 
-  int getStepNumber() const
+  inline int getStepNumber() const
   {
     return step_number;
   }
 
-  bool tryToStep(Micros now) override
+  inline bool tryToStep(Micros now) override
   {
-    boolean step = now - this->last_step_time >= (pulsing ? pulseTime : this->step_delay);
+    auto real_diff = now - this->real_step_time;
+    if (real_diff < (pulsing ? pulseTime : 40))
+    {
+      // we really need to wait :S
+      return false;
+    }
+
+    auto diff = now - this->last_step_time;
+    bool step = diff >= (pulsing ? pulseTime : this->step_delay - pulseTime);
     if (!step)
       return false;
+    this->real_step_time = now;
 
     if (pulsing)
     {
@@ -145,14 +174,24 @@ public:
 #else
       digitalWrite(stepPin, LOW);
 #endif
+      //this->last_step_time += pulseTime;
       return false;
     }
+
     if (this->step_delay == 0)
     {
       return false;
     }
-    // get the timeStamp of when you stepped:
-    this->last_step_time = now;
+    // we assuma that we 'rotate' for ever, or after a set_time
+    if (this->last_step_time == 0)
+    {
+      this->last_step_time = now;
+    }
+    else
+    {
+      // It is temping to do: this->last_step_time = now, but that will add some loss time: now - last_step_time
+      this->last_step_time += step_delay;
+    }
     pulsing = true;
 
     if (ghost)
@@ -192,12 +231,19 @@ public:
     steps = abs(steps);
     while (steps > 0)
     {
-      if (tryToStep(micros()))
+      if (tryToStep(::micros()))
       {
         --steps;
       }
     }
   }
+
+  virtual void sync() override {
+    auto now=::micros();
+    this->last_step_time = now;
+    this->real_step_time = now;
+  }
+
   /**
        Returns the delay in microseconds
     */
