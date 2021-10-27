@@ -3,17 +3,53 @@
 #ifdef MASTER_MODE
 
 #include "master.h"
-#include "uart.h"
-#include "rs485.h"
 #include "interop.h"
-
+#include "animation.h"
 #include "pins.h"
+#include <deque>
+#include "async.h"
+#include "time_tracker.h"
+
+using namespace oclock;
+
+AnimationController animationController;
 
 oclock::Master oclock::master;
 bool scanForError = false;
 int slaveIdCounter = -2;
 
-InteropRS485 uart(RS485_DE_PIN, RS485_RE_PIN);
+byte receiverBufferBytes[RECEIVER_BUFFER_SIZE];
+auto receiverBuffer = Buffer(receiverBufferBytes, RECEIVER_BUFFER_SIZE);
+RS485Gate<RS485_DE_PIN, RS485_RE_PIN> gate;
+InteropRS485 uart(0xFF, gate, receiverBuffer);
+
+class MasterLifecycle
+{
+public:
+    typedef std::function<void(Millis)> LoopFunc;
+    static LoopFunc loopFunc_;
+
+    // all steps before the master is ready
+    static void change_to_init();
+    static void change_to_accepting();
+
+    // in serving mode it will accept requests from the queue
+    static void change_to_serving();
+    // in broadcasting mode we send a request to the slave(s) and wait until a response
+    static void change_to_broadcasting(oclock::BroadcastRequest *request);
+};
+
+MasterLifecycle::LoopFunc MasterLifecycle::loopFunc_{};
+
+
+void oclock::Master::reset()    {
+    MasterLifecycle::change_to_init();
+}
+
+void oclock::ChannelRequest::send_raw(const UartMessage *msg, const byte length)
+{
+    uart.send_raw(msg, length);
+}
 
 void oclock::Master::setup()
 {
@@ -41,26 +77,30 @@ void oclock::Master::setup()
     slaveIdCounter = -2;
 
     ESP_LOGI(TAG, "setup -> scanForError=false, slaveIdCounter=-2");
-    ESP_LOGI(TAG, "setup -> Sync::read() = %s", Sync::read() ? "HIGH" : "LOW");
+    ESP_LOGI(TAG, "setup -> Sync::read() = %s", ONOFF(Sync::read()));
 
-    // force a reset, set line to high ( error mode )
-    // so everyone will do the same
-    Sync::write(HIGH);
-
-    change_to_init();
+    MasterLifecycle::change_to_init();
 }
 
 void oclock::Master::loop()
 {
-    if (loopFunc_)
+    if (MasterLifecycle::loopFunc_)
     {
-        loopFunc_(millis());
+        MasterLifecycle::loopFunc_(::millis());
     }
 }
 
-void oclock::Master::change_to_init()
+void MasterLifecycle::change_to_init()
 {
     ESP_LOGI(TAG, "change_to_init");
+
+    // force a reset, set line to high ( error mode )
+    // so everyone will do the same
+    Sync::write(HIGH);
+    ::delay(4000);
+
+    // force reset, give time to act
+    ::delay(500);
 
     // we ignore errors
     scanForError = false;
@@ -70,58 +110,133 @@ void oclock::Master::change_to_init()
     ESP_LOGI(TAG, "change_to_init -> scanForError=false, slaveIdCounter=-2");
     ESP_LOGI(TAG, "change_to_init -> Sync::read() = %s", Sync::read() ? "HIGH" : "LOW");
 
-    // force a reset, set line to high ( error mode )
-    // so everyone will do the same
+    // all slaves will stop their work and put Sync to low
+    uart.send(UartMessage(-1, MsgType::MSG_ID_RESET));
+
+    // make sure we are high
     Sync::write(HIGH);
 
     // make sure there is enough time for everyone to act
     Sync::sleep(100);
 
-    while (!Sync::read())
-    {
-        // wait while slave is high
-        delay(200);
-    }
-
-    // all slaves will stop their work and set sync to high
-    uart.send(UartMessage(-1, MsgType::MSG_ID_RESET));
-
-    // lets start
-    uart.send(UartMessage(-1, MsgType::MSG_ID_START));
-
-    // some time so everyone can go to low
-    delay(200);    
     uart.send(UartAcceptMessage(-1, 0));
-    uart.startReceiving();
+    uart.start_receiving();
 
-    change_to_accepting();
+    MasterLifecycle::change_to_accepting();
 }
 
+int lastLogSlaveId = -1;
+#define LAST_LOG_SIZE 512
+char lastLog[LAST_LOG_SIZE];
+int lastLogIdx = 0;
+
+bool processLog(UartLogMessage *msg)
+{
+    if (lastLogSlaveId != msg->getSourceId())
+    {
+        if (lastLogIdx > 0)
+        {
+            ESP_LOGE(TAG, "[S%d lastLogIdx > 0?:] %s", lastLogSlaveId >> 1, lastLog);
+            lastLogIdx = 0;
+        }
+    }
+    if (msg->overflow)
+    {
+        lastLog[lastLogIdx++] = '<';
+        lastLog[lastLogIdx++] = '.';
+        lastLog[lastLogIdx++] = '.';
+        lastLog[lastLogIdx++] = '.';
+        lastLog[lastLogIdx++] = '>';
+    }
+    lastLogSlaveId = msg->getSourceId();
+    for (int bufferIdx = 0; bufferIdx < msg->length(); bufferIdx++)
+    {
+        char ch = msg->buffer[bufferIdx];
+        if (ch == 0)
+            break;
+        lastLog[lastLogIdx++] = ch;
+        lastLog[lastLogIdx] = 0;
+        if (ch == '\n')
+        {
+            lastLog[lastLogIdx - 1] = 0;
+            ESP_LOGW(TAG, "[S%d:] %s", msg->getSourceId() >> 1, lastLog);
+            lastLogIdx = 0;
+        }
+        else if (lastLogIdx + 1 == LAST_LOG_SIZE)
+        {
+            // too much text
+            ESP_LOGE(TAG, "[S%d too much]: %s", msg->getSourceId() >> 1, lastLog);
+            lastLogIdx = 0;
+        }
+    }
+
+    if (msg->part + 1 == msg->total_parts && lastLogIdx != 0)
+    {
+        ESP_LOGE(TAG, "[S%d missing\\n!?]: %s", lastLogSlaveId >> 1, lastLog);
+        lastLogIdx = 0;
+    }
+    return true;
+}
 /***
  * 
  * While accepting we expect only to receive MSG_ID_ACCEPT 
  */
-void oclock::Master::change_to_accepting()
+void MasterLifecycle::change_to_accepting()
 {
     ESP_LOGI(TAG, "change_to_accepting");
     // uart
-    auto listener = [this](const UartMessage *msg)
+    auto listener = [](const UartMessage *msg)
     {
+        if (msg->getMessageType() == MsgType::MSG_LOG)
+        {
+            return processLog((UartLogMessage *)msg);
+        }
         bool sync = Sync::read();
         if (msg->getMessageType() != MsgType::MSG_ID_ACCEPT)
             return false;
 
-        if (sync)
+        if (!sync)
         {
-            slaveIdCounter = ((UartAcceptMessage *)msg)->getAssignedId();
-            ESP_LOGI(TAG, "Done waiting for all slaves: sync=HIGH and slaveIdCounter=%d", slaveIdCounter);
-
-            change_to_accepted();
-        }
-        else
-        {
+            // ignore for now
             ESP_LOGI(TAG, "Still waiting for some slaves: sync=LOW");
+            return true;
         }
+
+        slaveIdCounter = ((UartAcceptMessage *)msg)->getAssignedId();
+        ESP_LOGI(TAG, "Done waiting for all slaves: sync=HIGH and slaveIdCounter=%d", slaveIdCounter);
+
+        // send DONE
+        Sync::write(LOW);
+
+        // send config
+        for (int idx = 0; idx < MAX_SLAVES; ++idx)
+        {
+            const auto &s = oclock::master.slave(idx);
+            if (s.animator_id == -1)
+            {
+                ESP_LOGW(TAG, "Slave not mapped: S%d", idx);
+                continue;
+            }
+            animationController.remap(s.animator_id, idx);
+            auto request = UartSlaveConfigRequest(idx << 1,
+                                                  s.handles[0].magnet_offset, s.handles[1].magnet_offset,
+                                                  s.handles[0].initial_ticks, s.handles[1].initial_ticks);
+            uart.send(request);
+        }
+        uart.send(UartDoneMessage(-1, slaveIdCounter));
+
+        while (Sync::read() == HIGH)
+        {
+            // wait while slave is high
+            ::delay(200);
+            ESP_LOGI(TAG, "change_to_accepting: Wating while sync is HIGH...");
+        }
+        // accept errors
+        scanForError = true;
+        ESP_LOGI(TAG, "change_to_accepting: Sync::read()=%s", Sync::read() ? "HIGH" : "LOW");
+
+        change_to_serving();
+
         return true;
     };
     uart.set_listener(listener);
@@ -130,154 +245,152 @@ void oclock::Master::change_to_accepting()
     loopFunc_ = [](Millis t)
     {
         uart.loop();
-        yield();
+        ::yield();
     };
 }
 
-void oclock::Master::change_to_accepted()
+void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
 {
-    ESP_LOGI(TAG, "change_to_accepted: Sync::read()=%s", Sync::read() ? "HIGH" : "LOW");
-    Sync::write(LOW);
-    uart.send(UartMessage(-1, MSG_ID_DONE));
-
-    while (Sync::read() == HIGH)
-    {
-        // wait while slave is high
-        delay(200);
+#define FINAL_REQUEST()                        \
+    {                                          \
+        if (request)                           \
+        {                                      \
+            request->finalize();               \
+            delete request;                    \
+        }                                      \
+        MasterLifecycle::change_to_serving(); \
     }
-    // accept errors
-    scanForError = true;
-    ESP_LOGI(TAG, "change_to_accepted: Sync::read()=%s", Sync::read() ? "HIGH" : "LOW");
 
-    auto listener = [](const UartMessage *msg)
-    { return false; };
+    uart.start_receiving();
+    ESP_LOGI(TAG, "change_to_broadcasting");
+
+    // note: we copy by value since the stack will invalid at the point we need it!
+    auto listener = [request](const UartMessage *msg)
+    {
+        switch (msg->getMessageType())
+        {
+        case MsgType::MSG_LOG:
+            return processLog((UartLogMessage *)msg);
+
+        case MsgType::MSG_DUMP_LOG_REQUEST:
+            if (msg->getDstId() == 0xFF)
+            {
+                ESP_LOGI(TAG, "Done dumping logs request!");
+                FINAL_REQUEST()
+            }
+            return true;
+
+        case MsgType::MSG_POS_REQUEST:
+            ESP_LOGI(TAG, "Store pos request! %d %d", msg->getSourceId(), slaveIdCounter);
+            animationController.set_handles(msg->getSourceId(),
+                                            reinterpret_cast<const UartPosRequest *>(msg)->pos0,
+                                            reinterpret_cast<const UartPosRequest *>(msg)->pos1);
+            if (msg->getDstId() == 0xFF)
+            {
+                ESP_LOGI(TAG, "Done retrieving pos request!");
+                FINAL_REQUEST()
+            }
+            return true;
+
+        default:
+            return false;
+        }
+#undef FINAL_REQUEST
+    };
     uart.set_listener(listener);
 
     // our loop func
-    loopFunc_ = [](Millis t)
+    loopFunc_ = [](Millis now)
     {
+        AsyncRegister::loop(now);
         uart.loop();
-        yield();
+        ::yield();
     };
+}
 
-    uart.send(UartPosRequest());
-    uart.startReceiving();
+std::deque<oclock::ExecuteRequest *> open_requests;
+
+void MasterLifecycle::change_to_serving()
+{
+    ESP_LOGI(TAG, "change_to_serving");
+    uart.start_receiving();
+    auto listener = [](const UartMessage *msg)
+    {
+        switch (msg->getMessageType())
+        {
+        case MsgType::MSG_LOG:
+        case MsgType::MSG_POS_REQUEST:
+            LOG_MESSAGEW("should not happen!?", msg);
+            return false;
+
+        default:
+            return false;
+        }
+    };
+    uart.set_listener(listener);
+
+    loopFunc_ = [](Millis now)
+    {
+        if (!open_requests.empty())
+        {
+            oclock::ExecuteRequest *request = open_requests.front();
+            open_requests.pop_front();
+            // execute
+            request->execute();
+            delete request;
+            // jump from the loop
+            return;
+        }
+        AsyncRegister::loop(now);
+        // uart.loop();
+        ::yield();
+    };
 }
 
 void oclock::Master::dump_config()
 {
-    ESP_LOGCONFIG(TAG, "MASTER:");
-    ESP_LOGCONFIG(TAG, "  time:");
-    if (time_)
-    {
-        auto now = time_->now();
-        char buf[128];
-        now.strftime(buf, sizeof(buf), "%c");
-        ESP_LOGCONFIG(TAG, "     now: %s", buf);
-        ESP_LOGCONFIG(TAG, "     timestamp_now: %d", time_->timestamp_now());
-    }
-    else
-        ESP_LOGCONFIG(TAG, "      N/A");
-    uart.dump_config();
+    auto tag = TAG;
+    ESP_LOGI(tag, "MASTER:");
+    ESP_LOGI(tag, "  brightness: %d", brightness_);
+    ESP_LOGI(tag, "  time trackers:");
+    oclock::time_tracker::realTimeTracker.dump_config(tag);
+    oclock::time_tracker::testTimeTracker.dump_config(tag);
+    oclock::time_tracker::internalClockTimeTracker.dump_config(tag);
+
+    uart.dump_config(tag);
+
+    animationController.dump_config(tag);
 }
 
-#ifdef ddcaaffdfdsa
-
-void sendCommandIdReset()
+void oclock::queue(ExecuteRequest *request)
 {
-    // we ignore errors
-    scanForError = false;
-    // reset slaveIdCounter (every clock takes 2 ids so that is why it is -2)
-    slaveIdCounter = -2;
-
-    ESP_LOGI(TAG, "sendCommandIdReset -> scanForError=false, slaveIdCounter=-2");
-    ESP_LOGI(TAG, "sendCommandIdReset -> Sync::read() = %s", Sync::read() ? "HIGH" : "LOW");
-
-    // force a reset, set line to high ( error mode )
-    // so everyone will do the same
-    Sync::write(HIGH);
-
-    // make sure there is enough time for everyone to act
-    Sync::sleep(250);
-
-    // all slaves will stop their work and set sync to high
-    ESP_LOGI(TAG, "sendCommandIdReset -> send(UartMessage(-1, MSG_ID_RESET))");
-    uart.send(UartMessage(-1, MsgType::MSG_ID_RESET));
-
-    // lets start
-    ESP_LOGI(TAG, "sendCommandIdReset -> send(UartMessage(-1, MSG_ID_START))");
-    uart.send(UartMessage(-1, MSG_ID_START));
-    op_mode_ = OpMode::PRE_ACCEPT;
-    ESP_LOGI(TAG, "Change to OpMode::PRE_ACCEPT");
+    open_requests.push_back(request);
 }
 
-/**
- * 
- * Assumption: Sync is high
- */
-void sendCommandIdAccept()
+class CallbackRequest final : public oclock::ExecuteRequest
 {
-    uart.send(UartAcceptMessage(-1, 0));
-    uart.startReceiving();
-}
+    oclock::BroadcastRequest *org_request_;
 
-void sendCommandCycle()
+public:
+    CallbackRequest(oclock::BroadcastRequest *org_request) : org_request_(org_request) {}
+
+    virtual ~CallbackRequest()
+    {
+        if (org_request_)
+            delete org_request_;
+    }
+
+    void execute()
+    {
+        org_request_->execute();
+        MasterLifecycle::change_to_broadcasting(org_request_);
+        org_request_ = nullptr;
+    }
+};
+
+void oclock::queue(oclock::BroadcastRequest *request)
 {
-    sendCommandIdReset();
-    sendCommandIdAccept();
+    queue(new CallbackRequest(request));
 }
-
-void oclock::Master::loop_pre_accept()
-{
-    auto state = Sync::read();
-    ESP_LOGI(TAG, "sendCommandIdReset -> Sync::read() = %s", Sync::read() ? "HIGH" : "LOW");
-    if (state)
-    {
-        op_mode_ = OpMode::ACCEPT;
-        ESP_LOGI(TAG, "Change to OpMode::ACCEPT and send UartAcceptMessage");
-
-        uart.send(UartAcceptMessage(-1, 0));
-        uart.startReceiving();
-    }
-}
-
-void oclock::Master::loop()
-{
-    if (op_mode_ == OpMode::UNDEFINED)
-    {
-        ESP_LOGI(TAG, "Invalid state!? OpMode::UNDEFINED");
-    }
-    else if (op_mode_ == OpMode::INITIAL_DELAY)
-    {
-        auto t = millis();
-        if (t < op_delay_t_millis)
-            return;
-
-        blink(5);
-
-        // lets start
-        sendCommandIdReset();
-    }
-    else if (op_mode_ == OpMode::PRE_ACCEPT)
-    {
-        loop_pre_accept();
-    }
-    else if (op_mode_ == OpMode::ACCEPT)
-    {
-        auto t = micros();
-        uart.loop(t);
-    }
-    else
-    {
-        ESP_LOGI(TAG, "Unknown mode !? op_mode_=%d", op_mode_);
-    }
-}
-
-void UART::process(const UartMessageHolder &holder)
-{
-    ESP_LOGI(TAG, "process -> holder=?");
-}
-
-#endif
 
 #endif
