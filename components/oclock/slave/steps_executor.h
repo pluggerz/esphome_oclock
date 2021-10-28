@@ -8,6 +8,7 @@ class StepExecutors
 {
 public:
     static void setup(Stepper0 &stepper0, Stepper1 &stepper1);
+    static void reset();
 
     //
     static void process_begin_keys(const UartMessage *msg);

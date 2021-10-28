@@ -7,7 +7,7 @@
 
 typedef unsigned long Micros;
 
-typedef int PinValue;
+typedef uint8_t PinValue;
 typedef int16_t StepInt;
 typedef int8_t SpeedInRevsPerMinuteInt;
 

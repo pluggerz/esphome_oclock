@@ -1,5 +1,7 @@
 #pragma once
 
+#include <set>
+
 #include "interop.h"
 #include "master.h"
 #include "animation.h"
@@ -105,8 +107,39 @@ namespace oclock
                 // state.debug();
             }
 
+            void updateSpeeds(const Instructions &instructions)
+            {
+                // gather speeds
+                std::set<int> knownSpeeds{1};
+                for (const auto &cmd : instructions.cmds)
+                    knownSpeeds.insert(cmd.speed());
+
+                if (knownSpeeds.size() > cmdSpeedUtil.max_inflated_speed)
+                {
+                    ESP_LOGE(TAG, "Too many speeds to process !? current %d, while max %d",
+                             knownSpeeds.size(), cmdSpeedUtil.max_inflated_speed);
+                    return;
+                }
+
+                CmdSpeedUtil::Speeds speeds;
+                auto it = knownSpeeds.begin();
+                int last = 1;
+                for (int idx = 0; idx <= cmdSpeedUtil.max_inflated_speed; ++idx)
+                {
+                    if (it != knownSpeeds.end())
+                    {
+                        last = *it;
+                        ++it;
+                    }
+                    speeds[idx] = last;
+                }
+                cmdSpeedUtil.set_speeds(speeds);
+            }
+
             void sendInstructions(Instructions &instructions)
             {
+                updateSpeeds(instructions);
+                
                 // lets start transmitting
                 send(UartMessage(-1, MsgType::MSG_BEGIN_KEYS));
 
@@ -131,13 +164,7 @@ namespace oclock
         public:
             virtual void finalize() override final
             {
-                cmdSpeedUtil.set_speeds({1, 2, 4, 8, 16, 32, 64, 128});
-                for (int speed = 1; speed < 128; ++speed)
-                {
-                    auto inflated_speed = cmdSpeedUtil.inflate_speed(speed);
-                    auto deflated_speed = cmdSpeedUtil.deflate_speed(inflated_speed);
-                    ESP_LOGI(TAG, "speed=%d -> inflated_speed=%d -> deflated_speed=%d", speed, inflated_speed, deflated_speed);
-                }
+                
                 Instructions instructions;
                 instructions.add(22 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 4));
 
@@ -159,13 +186,6 @@ namespace oclock
         public:
             virtual void finalize() override final
             {
-                cmdSpeedUtil.set_speeds({1, 2, 4, 8, 16, 32, 64, 128});
-                for (int speed = 1; speed < 128; ++speed)
-                {
-                    auto inflated_speed = cmdSpeedUtil.inflate_speed(speed);
-                    auto deflated_speed = cmdSpeedUtil.deflate_speed(inflated_speed);
-                    ESP_LOGI(TAG, "speed=%d -> inflated_speed=%d -> deflated_speed=%d", speed, inflated_speed, deflated_speed);
-                }
                 Instructions instructions;
                 instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 4));
 
@@ -191,7 +211,6 @@ namespace oclock
 
             virtual void finalize() override final
             {
-                cmdSpeedUtil.set_speeds({2, 4, 8, 12, 18, 22, 28, 32});
                 ESP_LOGI(TAG, "do_track_time -> follow up");
 
                 auto now = tracker.now();
@@ -207,7 +226,7 @@ namespace oclock
                 Instructions instructions;
 
                 StepCalculator *calculator;
-                
+
                 switch (random(3))
                 {
                 case 0:

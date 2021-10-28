@@ -124,7 +124,7 @@ public:
 
 auto internalResetChecker = new InternalResetChecker();
 
-void high_prio_work()
+inline void high_prio_work() 
 {
     Micros now = micros();
     preMain0.loop(now);
@@ -214,6 +214,10 @@ void change_to_init()
     LedUtil::debug(2);
     internalResetChecker->disable();
 
+    cmdSpeedUtil.reset();
+    StepExecutors::reset();
+
+
     Sync::write(HIGH);
     slaveId = -2;
 
@@ -224,7 +228,7 @@ void change_to_init()
         {
         case MsgType::MSG_ID_RESET:
             Sync::write(LOW);
-
+            
             LedUtil::debug(4);
             return true;
 

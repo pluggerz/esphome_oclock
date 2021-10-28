@@ -35,18 +35,23 @@ class CmdSpeedUtil
 {
 public:
     typedef uint8_t Speeds[8];
-
     const uint8_t max_inflated_speed = 7;
+    
     Speeds speeds = {
-        1,   // 0
-        2,   // 1
-        4,   // 2
-        8,   // 3
-        12,  // 4
-        16,  // 5
-        32,  // 6
+        1,  // 0
+        2,  // 1
+        4,  // 2
+        8,  // 3
+        12, // 4
+        16, // 5
+        32, // 6
         64, // 7
     };
+
+    void reset()
+    {
+        set_speeds({1, 2, 4, 8, 12, 16, 32, 64});
+    }
 
     const Speeds &get_speeds() const;
     void set_speeds(const Speeds &speeds);

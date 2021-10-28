@@ -81,6 +81,7 @@ public:
     int handleId;
     Cmd cmd;
     int orderId;
+    inline uint8_t speed() const { return cmd.speed; }
     HandleCmd(int handleId, Cmd cmd, int orderId) : handleId(handleId), cmd(cmd), orderId(orderId) {}
 };
 

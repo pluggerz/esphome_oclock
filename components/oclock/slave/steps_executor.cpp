@@ -158,6 +158,12 @@ void StepExecutors::setup(Stepper0 &stepper0, Stepper1 &stepper1)
     animator1.stepperPtr = &stepper1;
 }
 
+void StepExecutors::reset()
+{
+    animator0.stop();
+    animator1.stop();
+}
+
 AnimationKeys animationKeysArray[2];
 
 void StepExecutors::process_begin_keys(const UartMessage *msg)

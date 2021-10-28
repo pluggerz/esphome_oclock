@@ -87,7 +87,7 @@ public:
   uint8_t assignedId;
 
 public:
-  UartDoneMessage(uint8_t source_id, uint8_t assignedId) : UartMessage(source_id, MSG_ID_DONE), assignedId(assignedId) { }
+  UartDoneMessage(uint8_t source_id, uint8_t assignedId) : UartMessage(source_id, MSG_ID_DONE), assignedId(assignedId) {}
 } __attribute__((packed, aligned(1)));
 
 struct LedModeRequest : public UartMessage
@@ -386,12 +386,12 @@ namespace oclock
     {
       send_raw(&m, (byte)sizeof(M));
     }
+    virtual ~ChannelRequest() {}
   };
 
   class ExecuteRequest : public ChannelRequest
   {
   public:
-    virtual ~ExecuteRequest() {}
     // 'execute' is called when the slaves are initialized
     virtual void execute() = 0;
   };
@@ -399,16 +399,12 @@ namespace oclock
   class BroadcastRequest : public ChannelRequest
   {
   public:
-    virtual ~BroadcastRequest()
-    {
-      ESP_LOGI(TAG, "call: this=%08X BroadcastRequest::~BroadcastRequest()", this);
-    }
     // 'execute' is called when the slaves are initialized
     virtual void execute() = 0;
+
     // 'finalize' is called only if broadcast is completed
-    virtual void finalize()
-    {
-      ESP_LOGI(TAG, "call: this=%08X BroadcastRequest::~finalize()", this);
+    virtual void finalize(){
+        // default is nothing
     };
   };
 
