@@ -1,16 +1,18 @@
+#pragma once
+
 #include "stepper.h"
-#include "Arduino.h"
 #include "steps_executor.h"
+#include "pins.h"
 
 volatile int completedFirstHits = 2;
 volatile int completedSecondHits = 2;
 volatile int completedThirdHits = 2;
 
-class PreMainMode final 
+template <class S>
+class PreMainMode final
 {
 private:
-    const String name;
-    Stepper &stepper;
+    S &stepper;
 
     // our administration
     bool hitFirstTime = true;
@@ -50,7 +52,7 @@ public:
         hitThirdTime = false;
 
         // always from the same side, to make sure we stop the same way
-        stepper.setSpeed(+searchSpeed);
+        stepper.set_speed_in_revs_per_minute(+searchSpeed);
         stepper.sync();
     }
 
@@ -58,12 +60,12 @@ public:
     {
     }
 
-    void setup(Micros now) 
+    void setup(Micros now)
     {
         reset();
     }
 
-    void loop(Micros now) 
+    void loop(Micros now)
     {
         //
         if (hitThirdTime == true)
@@ -76,13 +78,13 @@ public:
         }
         else if (hitFirstTime == false)
         {
-            if (stepper.findZero() != 0)
+            if (!stepper.is_magnet_tick())
             {
                 return;
             }
             completedFirstHits++;
             hitFirstTime = true;
-            stepper.setSpeed(-searchSpeed / 3);
+            stepper.set_speed_in_revs_per_minute(-searchSpeed / 3);
         }
         else if (stepOutSteps > 0)
         {
@@ -96,16 +98,16 @@ public:
             }
             if (stepOutSteps == 0)
             {
-                stepper.setSpeed(+searchSpeed / 1);
+                stepper.set_speed_in_revs_per_minute(+searchSpeed / 1);
             }
         }
         else if (hitSecondTime == false)
         {
-            if (stepper.findZero() == 0)
+            if (stepper.is_magnet_tick())
             {
                 hitSecondTime = true;
                 completedSecondHits++;
-                stepper.setSpeed(-searchSpeed / 1);
+                stepper.set_speed_in_revs_per_minute(-searchSpeed / 1);
             }
         }
         else if (hitThirdTime == false)
@@ -123,9 +125,8 @@ public:
     }
 
 public:
-    PreMainMode(Stepper &stepper, const String &name, int initialTicks)
-        : name(name),
-          stepper(stepper),
+    PreMainMode(S &stepper, int initialTicks)
+        : stepper(stepper),
           initial_ticks_(initialTicks)
     {
         reset();

@@ -7,25 +7,69 @@
 
 typedef unsigned long Micros;
 
-class Stepper
+typedef int PinValue;
+typedef int16_t StepInt;
+typedef int8_t SpeedInRevsPerMinuteInt;
+
+template <uint8_t stepPin, uint8_t dirPin, uint8_t centerPin>
+class Stepper final
 {
 protected:
-  const int number_of_steps;
-  int step_number = 0; // which step the motor is on
+  const StepInt number_of_steps;
+  StepInt step_number = 0; // which step the motor is on
   bool ghost = false;
-  int offset_steps_{0};
+  StepInt offset_steps_{0};
+  const Micros pulseTime = 5;
+  int8_t direction = 0;
+  Micros step_delay = 100;   // delay between steps, in micros, based on speed
+  Micros last_step_time = 0; // time stamp in micros of when the last step was taken
+  Micros real_step_time = 0;
+  bool pulsing = false; // currently pulsing
+  int8_t speed_in_revs_per_minute = 1;
+
+  inline bool get_magnet_pin() const __attribute__((always_inline))
+  {
+#ifdef USE_FAST_GPIO
+    return !FastGPIO::Pin<centerPin>::isInputHigh();
+#else
+    return digitalRead(centerPin) == LOW;
+#endif
+  }
+
+  inline void set_step_pin(PinValue value) __attribute__((always_inline))
+  {
+#ifdef USE_FAST_GPIO
+    FastGPIO::Pin<stepPin>::setOutputValue(value);
+#else
+    digitalWrite(stepPin, value);
+#endif
+  }
+
+  inline void set_direction_pin(PinValue value) __attribute__((always_inline))
+  {
+#ifdef USE_FAST_GPIO
+    FastGPIO::Pin<dirPin>::setOutputValue(value);
+#else
+    digitalWrite(dirPin, value);
+#endif
+  }
+
+  inline int8_t asDirection(StepInt steps) __attribute__((always_inline))
+  {
+    return steps >= 0 ? 0 : 1;
+  }
 
 public:
-  Stepper(int number_of_steps) : number_of_steps(number_of_steps)
+  Stepper(StepInt number_of_steps) : number_of_steps(number_of_steps)
   {
   }
 
-  int get_offset_steps() const
+  StepInt get_offset_steps() const
   {
     return offset_steps_;
   }
 
-  bool set_offset_steps(int value)
+  bool set_offset_steps(StepInt value)
   {
     if (offset_steps_ == value)
       return false;
@@ -33,7 +77,7 @@ public:
     return true;
   }
 
-  int range(int v) const
+  inline StepInt range(StepInt v) const __attribute__((always_inline))
   {
     while (v < 0)
     {
@@ -47,50 +91,13 @@ public:
   }
   void setGhosting(bool _ghost) { ghost = _ghost; }
 
-  int ticks() const { return range(step_number - offset_steps_); }
-
-  virtual bool tryToStep(Micros now) = 0;
-  virtual int setSpeed(int speedInRevsPerMinute) = 0;
-  virtual int findZero() = 0;
-  virtual void sync() = 0;
-};
-
-template <uint8_t stepPin, uint8_t dirPin, uint8_t centerPin>
-class StepperImpl final : public Stepper
-{
-  const Micros pulseTime = 5;
-  int8_t direction = 0;
-  Micros step_delay = 100;   // delay between steps, in micros, based on speed
-  Micros last_step_time = 0; // time stamp in micros of when the last step was taken
-  Micros real_step_time = 0;
-  bool pulsing = false; // currently pulsing
-  int8_t speedInRevsPerMinute = 1;
+  inline StepInt ticks() const __attribute__((always_inline)) { return range(step_number - offset_steps_); }
 
 public:
-  StepperImpl(int number_of_steps)
-      : Stepper(number_of_steps)
+  bool is_magnet_tick()
   {
-  }
+    auto isCenterPinLow = get_magnet_pin();
 
-  bool active() const
-  {
-    // if last 10ms there was no interaction than we are 'quit'
-    return millis() - real_step_time / 1000 < 500;
-  }
-
-  void calibrate()
-  {
-    step_number = number_of_steps / 2 + offset_steps_;
-  }
-
-  int findZero() override
-  {
-
-#ifdef USE_FAST_GPIO
-    auto isCenterPinLow = !FastGPIO::Pin<centerPin>::isInputHigh();
-#else
-    auto isCenterPinLow = digitalRead(centerPin) == LOW;
-#endif
     if (isCenterPinLow)
     {
       if (pulsing)
@@ -98,36 +105,23 @@ public:
         // reset as well
         pulsing = false;
         last_step_time = 0;
-#ifdef USE_FAST_GPIO
-        FastGPIO::Pin<stepPin>::setOutputValue(LOW);
-#else
-        digitalWrite(stepPin, LOW);
-#endif
+        set_step_pin(LOW);
       }
       step_number = 0;
-      return 0;
+      return true;
     }
     tryToStep(::micros());
-    return 1;
+    return false;
   }
 
-  int asDirection(int steps)
-  {
-    return steps >= 0 ? 0 : 1;
-  }
-
-  void updateDirection(int new_direction)
+  void updateDirection(int8_t new_direction)
   {
     if (this->direction == new_direction)
     {
       return;
     }
     this->direction = new_direction;
-#ifdef USE_FAST_GPIO
-    FastGPIO::Pin<dirPin>::setOutputValue(direction == 0 ? LOW : HIGH);
-#else
-    digitalWrite(dirPin, direction == 0 ? LOW : HIGH);
-#endif
+    set_direction_pin(direction == 0 ? LOW : HIGH);
   }
 
 public:
@@ -141,17 +135,12 @@ public:
     digitalWrite(stepPin, LOW);
   }
 
-  inline int getSpeedInRevsPerMinute() const
-  {
-    return speedInRevsPerMinute;
-  }
-
   inline int getStepNumber() const
   {
     return step_number;
   }
 
-  inline bool tryToStep(Micros now) override
+  bool tryToStep(Micros now)
   {
     auto real_diff = now - this->real_step_time;
     if (real_diff < (pulsing ? pulseTime : 40))
@@ -169,11 +158,7 @@ public:
     if (pulsing)
     {
       this->pulsing = false;
-#ifdef USE_FAST_GPIO
-      FastGPIO::Pin<stepPin>::setOutputValue(LOW);
-#else
-      digitalWrite(stepPin, LOW);
-#endif
+      set_step_pin(LOW);
       //this->last_step_time += pulseTime;
       return false;
     }
@@ -198,11 +183,7 @@ public:
     {
       return true;
     }
-#ifdef USE_FAST_GPIO
-    FastGPIO::Pin<stepPin>::setOutputValue(HIGH);
-#else
-    digitalWrite(stepPin, HIGH);
-#endif
+    set_step_pin(HIGH);
     if (this->direction == 0)
     {
       ++this->step_number;
@@ -220,7 +201,7 @@ public:
     return true;
   }
 
-  void step(int steps)
+  void step(StepInt steps)
   {
     if (this->step_delay == 0)
     {
@@ -238,8 +219,9 @@ public:
     }
   }
 
-  virtual void sync() override {
-    auto now=::micros();
+  void sync()
+  {
+    auto now = ::micros();
     this->last_step_time = now;
     this->real_step_time = now;
   }
@@ -247,19 +229,24 @@ public:
   /**
        Returns the delay in microseconds
     */
-  int setSpeed(int speedInRevsPerMinute) override
+  int set_speed_in_revs_per_minute(SpeedInRevsPerMinuteInt value)
   {
-    this->speedInRevsPerMinute = speedInRevsPerMinute;
-    if (speedInRevsPerMinute == 0)
+    this->speed_in_revs_per_minute = value;
+    if (speed_in_revs_per_minute == 0)
     {
       this->step_delay = 0;
       updateDirection(0);
     }
     else
     {
-      this->step_delay = abs(60L * 1000L * 1000L / this->number_of_steps / speedInRevsPerMinute);
-      updateDirection(asDirection(speedInRevsPerMinute));
+      this->step_delay = abs(60L * 1000L * 1000L / this->number_of_steps / speed_in_revs_per_minute);
+      updateDirection(asDirection(speed_in_revs_per_minute));
     }
     return this->step_delay;
   }
 };
+
+#include "pins.h"
+
+typedef Stepper<MOTOR_A_STEP, MOTOR_A_DIR, SLAVE_POS_B> Stepper0;
+typedef Stepper<MOTOR_B_STEP, MOTOR_B_DIR, SLAVE_POS_A> Stepper1;

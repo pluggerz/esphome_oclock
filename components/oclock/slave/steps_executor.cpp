@@ -36,12 +36,13 @@ public:
     }
 };
 
+template <class S>
 class Animator final
 {
 public:
     Millis t0;
     Millis millisLeft;
-    Stepper *stepperPtr;
+    S *stepperPtr;
     AnimationKeys *keysPtr = nullptr;
     bool do_sync{true};
     int idx = 0;
@@ -71,7 +72,7 @@ public:
         }
 
         AnimationKeys keys = *keysPtr;
-        Stepper &stepper = *stepperPtr;
+        S &stepper = *stepperPtr;
         if (steps > 0)
         {
             switch (steps)
@@ -119,7 +120,7 @@ public:
         else
             steps = clockwise ? Distance::clockwise(current, goal) : Distance::antiClockwise(current, goal);
 
-        stepper.setSpeed(clockwise ? cmd.speed : -cmd.speed);
+        stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed : -cmd.speed);
         if (do_sync)
         {
             stepper.sync();
@@ -143,20 +144,26 @@ public:
         this->steps = 0;
         this->do_sync = true;
     }
-} animator[2];
+};
 
-void StepExecutors::setup(Stepper &stepper0, Stepper &stepper1)
+typedef Animator<Stepper0> Animator0;
+typedef Animator<Stepper1> Animator1;
+
+Animator0 animator0;
+Animator1 animator1;
+
+void StepExecutors::setup(Stepper0 &stepper0, Stepper1 &stepper1)
 {
-    animator[0].stepperPtr = &stepper0;
-    animator[1].stepperPtr = &stepper1;
+    animator0.stepperPtr = &stepper0;
+    animator1.stepperPtr = &stepper1;
 }
 
 AnimationKeys animationKeysArray[2];
 
 void StepExecutors::process_begin_keys(const UartMessage *msg)
 {
-    animator[0].stop();
-    animator[1].stop();
+    animator0.stop();
+    animator1.stop();
 
     animationKeysArray[0].clear();
     animationKeysArray[1].clear();
@@ -165,8 +172,8 @@ void StepExecutors::process_begin_keys(const UartMessage *msg)
 void StepExecutors::process_end_keys(const UartEndKeysMessage *msg)
 {
     cmdSpeedUtil.set_speeds(msg->speed_map);
-    animator[0].start(&animationKeysArray[0], 1);
-    animator[1].start(&animationKeysArray[1], 1);
+    animator0.start(&animationKeysArray[0], 1);
+    animator1.start(&animationKeysArray[1], 1);
 }
 
 void StepExecutors::process_add_keys(const UartKeysMessage *msg)
@@ -176,6 +183,6 @@ void StepExecutors::process_add_keys(const UartKeysMessage *msg)
 
 void StepExecutors::loop(Micros now)
 {
-    animator[0].loop(now);
-    animator[1].loop(now);
+    animator0.loop(now);
+    animator1.loop(now);
 }

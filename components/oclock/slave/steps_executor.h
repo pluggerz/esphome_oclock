@@ -7,9 +7,9 @@
 class StepExecutors
 {
 public:
-    static void setup(Stepper &stepper0, Stepper &stepper1);
- 
-    // 
+    static void setup(Stepper0 &stepper0, Stepper1 &stepper1);
+
+    //
     static void process_begin_keys(const UartMessage *msg);
     static void process_add_keys(const UartKeysMessage *msg);
     static void process_end_keys(const UartEndKeysMessage *msg);

@@ -10,11 +10,11 @@ int nextSlaveId = -2;
 
 #include "pins.h"
 
-StepperImpl<MOTOR_A_STEP, MOTOR_A_DIR, SLAVE_POS_B> stepper1(NUMBER_OF_STEPS);
-StepperImpl<MOTOR_B_STEP, MOTOR_B_DIR, SLAVE_POS_A> stepper2(NUMBER_OF_STEPS);
+Stepper0 stepper0(NUMBER_OF_STEPS);
+Stepper1 stepper1(NUMBER_OF_STEPS);
 
-PreMainMode preMain1(stepper1, "main1", NUMBER_OF_STEPS / 2);
-PreMainMode preMain2(stepper2, "main2", 0);
+PreMainMode<Stepper0> preMain0(stepper0, NUMBER_OF_STEPS / 2);
+PreMainMode<Stepper1> preMain1(stepper1, 0);
 
 class AllSteppers
 {
@@ -66,10 +66,10 @@ void initMotorPins()
     pinMode(MOTOR_ENABLE, OUTPUT);
     pinMode(MOTOR_RESET, OUTPUT);
 
+    stepper0.setup();
     stepper1.setup();
-    stepper2.setup();
 
-    StepExecutors::setup(stepper1, stepper2);
+    StepExecutors::setup(stepper0, stepper1);
 
     Sync::sleep(10);
 
@@ -127,8 +127,8 @@ auto internalResetChecker = new InternalResetChecker();
 void high_prio_work()
 {
     Micros now = micros();
+    preMain0.loop(now);
     preMain1.loop(now);
-    preMain2.loop(now);
 }
 
 void setup()
@@ -149,8 +149,8 @@ void setup()
     //AsyncRegister::anom(&preMain1);
     //AsyncRegister::anom(&preMain2);
 
+    preMain0.setup(::micros());
     preMain1.setup(::micros());
-    preMain2.setup(::micros());
 
     // forward the news that we are new
     Sync::write(HIGH);
@@ -193,10 +193,10 @@ void pushLogs()
 void do_slave_config_request(const UartSlaveConfigRequest *msg)
 {
     LedUtil::debug(12);
-    bool change = stepper1.set_offset_steps(msg->handle_offset0);
-    change = stepper2.set_offset_steps(msg->handle_offset1) || change;
-    change = preMain1.set_initial_ticks(msg->initial_ticks0) || change;
-    change = preMain2.set_initial_ticks(msg->initial_ticks1) || change;
+    bool change = stepper0.set_offset_steps(msg->handle_offset0);
+    change = stepper1.set_offset_steps(msg->handle_offset1) || change;
+    change = preMain0.set_initial_ticks(msg->initial_ticks0) || change;
+    change = preMain1.set_initial_ticks(msg->initial_ticks1) || change;
 
     ESP_LOGI(TAG, "handle_offset(%d, %d)",
              msg->handle_offset0, msg->handle_offset1);
@@ -204,8 +204,8 @@ void do_slave_config_request(const UartSlaveConfigRequest *msg)
              msg->initial_ticks0, msg->initial_ticks1);
     if (change)
     {
+        preMain0.reset();
         preMain1.reset();
-        preMain2.reset();
     }
 }
 
@@ -279,7 +279,7 @@ void change_to_init()
 void dump_config()
 {
     ESP_LOGI(TAG, "  slave: S%d", slaveId >> 1);
-    ESP_LOGI(TAG, "    STEPS_TO_0(%d, %d)", stepper1.get_offset_steps(), stepper2.get_offset_steps());
+    ESP_LOGI(TAG, "    STEPS_TO_0(%d, %d)", stepper0.get_offset_steps(), stepper1.get_offset_steps());
 }
 
 
@@ -303,16 +303,16 @@ void do_position_request(const UartMessage *msg)
 
     if (stop)
     {
+        preMain0.stop();
         preMain1.stop();
-        preMain2.stop();
     }
 
-    auto busy = preMain1.busy() || preMain2.busy();
+    auto busy = preMain0.busy() || preMain1.busy();
+    auto stepper0Ticks = preMain0.busy() ? Ticks::normalize(-stepper0.get_offset_steps()) : stepper0.ticks();
     auto stepper1Ticks = preMain1.busy() ? Ticks::normalize(-stepper1.get_offset_steps()) : stepper1.ticks();
-    auto stepper2Ticks = preMain2.busy() ? Ticks::normalize(-stepper2.get_offset_steps()) : stepper2.ticks();
 
     pushLogs();
-    uart.send(UartPosRequest(stop, slaveId, nextSlaveId, stepper1Ticks / STEP_MULTIPLIER, stepper2Ticks / STEP_MULTIPLIER, !busy));
+    uart.send(UartPosRequest(stop, slaveId, nextSlaveId, stepper0Ticks / STEP_MULTIPLIER, stepper1Ticks / STEP_MULTIPLIER, !busy));
     uart.start_receiving();
 }
 
@@ -394,8 +394,8 @@ int count = 0;
 void loop()
 {
     Micros now = micros();
+    preMain0.loop(now);
     preMain1.loop(now);
-    preMain2.loop(now);
 
     if (count++ == 64)
     {
