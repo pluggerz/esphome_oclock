@@ -4,7 +4,7 @@
 #include "interop.h"
 #include "keys.h"
 
-#define MAX_ANIMATION_KEYS 20
+#define MAX_ANIMATION_KEYS 90
 #define MAX_ANIMATION_KEYS_PER_MESSAGE 14 // MAX 14!
 
 struct UartKeysMessage : public UartMessage
@@ -12,14 +12,14 @@ struct UartKeysMessage : public UartMessage
     // it would be tempting to use: Cmd cmds[MAX_ANIMATION_KEYS_PER_MESSAGE] ={}; but padding is messed up between esp and uno :()
     // note we control the bits better ;P
 private:
-    u8 _size;
+    uint8_t _size;
     CmdInt cmds[MAX_ANIMATION_KEYS_PER_MESSAGE] = {};
 
 public:
-    UartKeysMessage(u8 destination_id, u8 _size) : UartMessage(-1, MSG_SEND_KEYS, destination_id), _size(_size)
+    UartKeysMessage(uint8_t destination_id, uint8_t _size) : UartMessage(-1, MSG_SEND_KEYS, destination_id), _size(_size)
     {
     }
-    u8 size() const
+    uint8_t size() const
     {
         return _size;
     }
@@ -52,10 +52,14 @@ public:
 struct UartEndKeysMessage : public UartMessage
 {
 public:
+    bool relative;
     u16 numberOfMillisLeft;
     uint8_t speed_map[8];
 
-    UartEndKeysMessage(const uint8_t (&speed_map)[8], u16 numberOfMillisLeft) : UartMessage(-1, MSG_END_KEYS, ALL_SLAVES), numberOfMillisLeft(numberOfMillisLeft)
+    UartEndKeysMessage(bool relative, const uint8_t (&speed_map)[8], u16 numberOfMillisLeft)
+        : UartMessage(-1, MSG_END_KEYS, ALL_SLAVES),
+          relative(relative),
+          numberOfMillisLeft(numberOfMillisLeft)
     {
         for (int idx = 0; idx < 8; ++idx)
         {

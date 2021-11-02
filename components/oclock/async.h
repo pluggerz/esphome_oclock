@@ -11,7 +11,9 @@ typedef unsigned long Units;
 
 class Async
 {
-  bool canceled, initialized;
+  unsigned char
+     canceled : 1,
+    initialized : 1;
 
 protected:
   Async() : canceled(false), initialized(false)
@@ -50,15 +52,16 @@ class AsyncDelay : virtual public Async
 {
 private:
   Micros t0_ = 0;
-  Micros delay;
+  typedef unsigned short DelayMicros;
+  DelayMicros delay;
 
 protected:
   virtual void step() = 0;
 
-  void setDelay(Micros delay) { this->delay = delay; }
+  void setDelay(DelayMicros delay) { this->delay = delay; }
 
 public:
-  AsyncDelay(Micros delay) : delay(delay)
+  AsyncDelay(DelayMicros delay) : delay(delay)
   {
   }
 
@@ -89,7 +92,7 @@ enum TimeUnit
 
 class ToMicros
 {
-  public:
+public:
   static Micros toMicros(Units units, TimeUnit timeUnit)
   {
     switch (timeUnit)

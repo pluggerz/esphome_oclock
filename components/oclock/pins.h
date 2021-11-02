@@ -7,18 +7,18 @@
 #include <FastGPIO.h>
 #define USE_FAST_GPIO_FOR_SYNC__
 
-const uint8_t SYNC_OUT_PIN = 3; //PD3
-const uint8_t SYNC_IN_PIN = 2;  //PD2
+constexpr uint8_t SYNC_OUT_PIN = 3; //PD3
+constexpr uint8_t SYNC_IN_PIN = 2;  //PD2
 
-const uint8_t MOTOR_SLEEP_PIN = 4; //PD4
-const uint8_t MOTOR_ENABLE = 10;   //PB2
-const uint8_t MOTOR_RESET = 9;     //PB1
+constexpr uint8_t MOTOR_SLEEP_PIN = 4; //PD4
+constexpr uint8_t MOTOR_ENABLE = 10;   //PB2
+constexpr uint8_t MOTOR_RESET = 9;     //PB1
 
-const uint8_t MOTOR_A_DIR = 5;  //PD5
-const uint8_t MOTOR_A_STEP = 6; //PD6
+constexpr uint8_t MOTOR_A_DIR = 5;  //PD5
+constexpr uint8_t MOTOR_A_STEP = 6; //PD6
 
-const uint8_t MOTOR_B_DIR = 7;  //PD7
-const uint8_t MOTOR_B_STEP = 8; //PB0
+constexpr uint8_t MOTOR_B_DIR = 7;  //PD7
+constexpr uint8_t MOTOR_B_STEP = 8; //PB0
 
 const uint8_t SLAVE_RS485_RXD_DPIN = 1; // PD1 RO !RXD
 const uint8_t SLAVE_POS_A = 16;         // A2

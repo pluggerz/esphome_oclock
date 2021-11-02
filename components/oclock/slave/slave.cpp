@@ -2,11 +2,10 @@
 
 #include "steppers.h"
 #include "steps_executor.h"
-#include "async.h"
 
 bool forwardPulse = false;
-int slaveId = -2;
-int nextSlaveId = -2;
+int8_t slaveId = -2;
+int8_t nextSlaveId = -2;
 
 #include "pins.h"
 
@@ -45,7 +44,7 @@ InteropRS485 uart(ALL_SLAVES, gate, receiverBuffer);
 
 int LedUtil::level = -1;
 
-#include "slave/backgroundleds.h"
+#include "slave/leds_background.h"
 
 LedAsync ledAsync;
 
@@ -54,6 +53,10 @@ BackgroundLedAnimations::Fixed backgroundLedLayer;
 BackgroundLedAnimations::Fixed offBackgroundLedLayer;
 BackgroundLedAnimations::Xmas xmasLedLayer;
 BackgroundLedAnimations::Rainbow rainbowLedLayer;
+
+#include "slave/leds_foreground.h"
+
+FollowHandlesLedLayer followHandlesLedLayer;
 
 // can work on top of any layer
 // FollowLightLedLayer followLightLedLayer;
@@ -91,25 +94,13 @@ void initMotorPins()
 void change_to_init();
 void changeToMainTask();
 
-class InternalResetChecker : public AsyncDelay
+class InternalResetChecker final
 {
-    Millis tStart{0L};
+    Micros t0_{0};
+    Micros delay{200};
     bool enabled_{false};
 
-public:
-    InternalResetChecker() : AsyncDelay(100)
-    {
-    }
-
-    void enable()
-    {
-        enabled_ = true;
-        tStart = 0L;
-    }
-
-    void disable() { enabled_ = false; }
-
-    virtual void step() override
+    void step()
     {
         if (!enabled_)
             return;
@@ -120,11 +111,28 @@ public:
             change_to_init();
         }
     }
+
+public:
+    void enable()
+    {
+        enabled_ = true;
+    }
+
+    void disable() { enabled_ = false; }
+
+    void loop(Micros t1)
+    {
+        if (t1 - t0_ > delay)
+        {
+            t0_ = t1;
+            step();
+        }
+    }
 };
 
-auto internalResetChecker = new InternalResetChecker();
+InternalResetChecker internalResetChecker;
 
-inline void high_prio_work() 
+inline void high_prio_work()
 {
     Micros now = micros();
     preMain0.loop(now);
@@ -145,20 +153,16 @@ void setup()
 
     LedUtil::debug(1);
 
-    // note that deleting will be harmful, but actually will never happen!
-    //AsyncRegister::anom(&preMain1);
-    //AsyncRegister::anom(&preMain2);
-
     preMain0.setup(::micros());
     preMain1.setup(::micros());
 
-    // forward the news that we are new
+    // forward the news that we are new ('error')
     Sync::write(HIGH);
 
     change_to_init();
 
-    AsyncRegister::byName("resetChecker", internalResetChecker);
-    AsyncRegister::byName("led", &ledAsync);
+    //  ledAsync.set_led_layer(&followHandlesLedLayer);
+    ledAsync.set_led_layer(&debugLedLayer());
 }
 
 void pushLog(bool overflow, uint8_t part, uint8_t total_parts)
@@ -202,7 +206,7 @@ void do_slave_config_request(const UartSlaveConfigRequest *msg)
              msg->handle_offset0, msg->handle_offset1);
     ESP_LOGI(TAG, "initial_ticks(%d, %d)",
              msg->initial_ticks0, msg->initial_ticks1);
-    if (change)
+    // if (change)
     {
         preMain0.reset();
         preMain1.reset();
@@ -212,11 +216,10 @@ void do_slave_config_request(const UartSlaveConfigRequest *msg)
 void change_to_init()
 {
     LedUtil::debug(2);
-    internalResetChecker->disable();
+    internalResetChecker.disable();
 
     cmdSpeedUtil.reset();
     StepExecutors::reset();
-
 
     Sync::write(HIGH);
     slaveId = -2;
@@ -228,7 +231,7 @@ void change_to_init()
         {
         case MsgType::MSG_ID_RESET:
             Sync::write(LOW);
-            
+
             LedUtil::debug(4);
             return true;
 
@@ -266,7 +269,7 @@ void change_to_init()
                 nextSlaveId = -1;
             LedUtil::debug(10);
 
-            internalResetChecker->enable();
+            internalResetChecker.enable();
             changeToMainTask();
             return true;
         }
@@ -282,10 +285,12 @@ void change_to_init()
 
 void dump_config()
 {
-    ESP_LOGI(TAG, "  slave: S%d", slaveId >> 1);
-    ESP_LOGI(TAG, "    STEPS_TO_0(%d, %d)", stepper0.get_offset_steps(), stepper1.get_offset_steps());
+    auto tag = F("");
+    ESP_LOGI(tag, "slave: S%d", slaveId >> 1);
+    ESP_LOGI(tag, " steppers:");
+    stepper0.dump_config(tag);
+    stepper1.dump_config(tag);
 }
-
 
 void do_dump_logs_request(const UartMessage *msg)
 {
@@ -355,45 +360,46 @@ void do_led_mode_request(const LedModeRequest *msg)
     }
 }
 
+auto uartMainListener = [](const UartMessage *msg)
+{
+    switch (msg->getMessageType())
+    {
+    case MsgType::MSG_BEGIN_KEYS:
+        StepExecutors::process_begin_keys(msg);
+        return true;
+
+    case MsgType::MSG_SEND_KEYS:
+        StepExecutors::process_add_keys(reinterpret_cast<const UartKeysMessage *>(msg));
+        return true;
+
+    case MsgType::MSG_END_KEYS:
+        StepExecutors::process_end_keys(reinterpret_cast<const UartEndKeysMessage *>(msg));
+        return true;
+
+    case MSG_POS_REQUEST:
+        do_position_request(msg);
+        return true;
+
+    case MSG_DUMP_LOG_REQUEST:
+        do_dump_logs_request(msg);
+        return true;
+
+    case MSG_LED_MODE:
+        do_led_mode_request(reinterpret_cast<const LedModeRequest *>(msg));
+        return true;
+
+    default:
+        return false;
+    }
+};
+
 void changeToMainTask()
 {
-    auto listener = [](const UartMessage *msg)
-    {
-        switch (msg->getMessageType())
-        {
-        case MsgType::MSG_BEGIN_KEYS:
-            StepExecutors::process_begin_keys(msg);
-            return true;
-
-        case MsgType::MSG_SEND_KEYS:
-            StepExecutors::process_add_keys(reinterpret_cast<const UartKeysMessage *>(msg));
-            return true;
-
-        case MsgType::MSG_END_KEYS:
-            StepExecutors::process_end_keys(reinterpret_cast<const UartEndKeysMessage *>(msg));
-            return true;
-
-        case MSG_POS_REQUEST:
-            do_position_request(msg);
-            return true;
-
-        case MSG_DUMP_LOG_REQUEST:
-            do_dump_logs_request(msg);
-            return true;
-
-        case MSG_LED_MODE:
-            do_led_mode_request(reinterpret_cast<const LedModeRequest *>(msg));
-            return true;
-
-        default:
-            return false;
-        }
-    };
-    uart.set_listener(listener);
+    uart.set_listener(uartMainListener);
     uart.start_receiving();
 }
 
-int count = 0;
+uint8_t count = 0;
 
 void loop()
 {
@@ -404,8 +410,9 @@ void loop()
     if (count++ == 64)
     {
         // this way the motors will be able to use speed 64
-        AsyncRegister::loop(now);
         uart.loop();
+        internalResetChecker.loop(now);
+        ledAsync.loop(now);
 
         count = 0;
     }

@@ -41,6 +41,6 @@ typedef unsigned long Millis;
 
 typedef void (*LoopFuncPtr)(Millis);
 
-#define RECEIVER_BUFFER_SIZE 128
+#define RECEIVER_BUFFER_SIZE 110 // was 128
 #define MAX_SLAVES 24
 #define MAX_HANDLES 48

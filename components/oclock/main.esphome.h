@@ -103,6 +103,16 @@ namespace oclock
             AsyncRegister::byName("time_tracker", new TrackTimeTask(oclock::time_tracker::internalClockTimeTracker));
         }
     };
+    
+    class SpeedAdaptTestSwitch : public esphome::switch_::Switch
+    {
+    public:
+        virtual void write_state(bool state) override
+        {
+            publish_state(false);
+            oclock::queue(new requests::SpeedAdaptTestRequest());
+        }
+    };
 
     class SpeedCheckSwitch32 : public esphome::switch_::Switch
     {

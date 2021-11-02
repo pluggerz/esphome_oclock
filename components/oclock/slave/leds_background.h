@@ -1,115 +1,7 @@
 #pragma once
 
 #include "leds.h"
-#include "async.h"
 #include "hal.h"
-
-typedef struct rgba_color
-{
-    uint8_t red, green, blue;
-    uint8_t alpha = 31;
-
-    void reset()
-    {
-        red = green = blue = 0;
-        alpha = 31;
-    }
-
-    void off()
-    {
-        red = green = blue = 0;
-        alpha = 0;
-    }
-    operator rgb_color() const { return rgb_color(red, green, blue); }
-    rgba_color(){};
-    rgba_color(const rgb_color &c, uint8_t a) : red(c.red), green(c.green), blue(c.blue), alpha(a){};
-    rgba_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 31) : red(r), green(g), blue(b), alpha(a){};
-} rgba_color;
-
-class LedLayer
-{
-    friend class LedAnimation;
-
-protected:
-    typedef unsigned long Offset;
-    int brightness = 31;
-
-public:
-    virtual void start()
-    {
-    }
-
-    virtual bool update(Millis t)
-    {
-        return false;
-    }
-    virtual void combine(rgba_color *result) const = 0;
-
-    virtual ~LedLayer() {}
-};
-
-class LedAsync : public Async
-{
-private:
-    rgba_color leds[LED_COUNT];
-    LedLayer *ledLayer_{nullptr};
-    int brightness_ = 31;
-
-    void updateFrame()
-    {
-        Hal::yield();
-        ledStrip.startFrame();
-        Hal::yield();
-        for (uint16_t i = 1; i <= LED_COUNT; i++)
-        {
-            const auto &led = leds[i % LED_COUNT];
-            int alpha = round((double)led.alpha * (double)brightness_ / 31.0);
-            if (alpha > 31)
-            {
-                alpha = 31;
-            }
-            ledStrip.sendColor(led, alpha);
-            Hal::yield();
-        }
-        ledStrip.endFrame(LED_COUNT);
-        Hal::yield();
-    }
-
-protected:
-    void loop(Micros now) override
-    {
-        if (ledLayer_ == nullptr)
-            return;
-        if (ledLayer_->update(now))
-        {
-            ledLayer_->combine(leds);
-            updateFrame();
-        }
-    }
-
-public:
-    void set_brightness(int brightness)
-    {
-        if (brightness_ == brightness)
-            return;
-
-        brightness_ = brightness;
-        updateFrame();
-    }
-    void set_led_layer(LedLayer *ledLayer)
-    {
-        if (ledLayer_ == ledLayer)
-            return;
-
-        ledLayer_ = ledLayer;
-        if (ledLayer_ != nullptr)
-        {
-            ledLayer_->start();
-            ledLayer_->update(micros());
-            updateFrame();
-        }
-    }
-};
 
 namespace BackgroundLedAnimations
 {
@@ -119,7 +11,7 @@ namespace BackgroundLedAnimations
     class Rainbow;
 };
 
-class BackgroundLedAnimations::Fixed : public LedLayer
+class BackgroundLedAnimations::Fixed : public BackgroundLayer
 {
 private:
     rgb_color color = rgb_color(0, 0, 0);
@@ -134,7 +26,7 @@ public:
         initialized = false;
     }
 
-    virtual void combine(rgba_color *result) const override
+    virtual void combine(Leds &result) const override
     {
         for (int idx = 0; idx < LED_COUNT; ++idx)
             result[idx] = rgba_color(color, brightness);
@@ -157,7 +49,7 @@ public:
     }
 };
 
-class BackgroundLedAnimations::Xmas : public LedLayer
+class BackgroundLedAnimations::Xmas : public BackgroundLayer
 {
     rgb_color colors[LED_COUNT];
 
@@ -165,7 +57,7 @@ class BackgroundLedAnimations::Xmas : public LedLayer
 
     // system timer, incremented by one every time through the main loop
     unsigned int loopCount = 0;
-
+    unsigned int delayInMillis=20;
     unsigned int seed = 0; // used to initialize random number generator
 
 public:
@@ -183,10 +75,9 @@ public:
 
 private:
     unsigned char pattern_ = Pattern::TraditionalColors;
-    unsigned int maxLoops; // go to next state when loopCount >= maxLoops
+    uint16_t maxLoops; // go to next state when loopCount >= maxLoops
 
     bool postLoop = false;
-    int delayInMillis = 20;
     uint8_t startTime;
 
 public:
@@ -200,7 +91,7 @@ public:
     }
 
 private:
-    virtual void combine(rgba_color *result) const override
+    virtual void combine(Leds& result) const override
     {
         for (int idx = 0; idx < LED_COUNT; ++idx)
         {
@@ -227,11 +118,11 @@ private:
     }
 
     // main loop
-    bool update(Micros micros) override
+    bool update(Millis now) override
     {
         if (!postLoop)
         {
-            startTime = millis();
+            startTime = now;
             loop_pre(startTime);
             // Make sure that loops are not too fast there are a small number
             // of LEDs and the colors are calculated quickly.
@@ -240,7 +131,7 @@ private:
         }
         else
         {
-            if ((uint8_t)(millis() - startTime) < delayInMillis)
+            if ((uint8_t)(now - startTime) < delayInMillis)
             {
                 return false;
             }
@@ -252,8 +143,8 @@ private:
 
     void loop_pre(uint8_t startTime)
     {
-        
-        delayInMillis=20;
+
+        delayInMillis = 20;
         if (loopCount == 0)
         {
             // whenever timer resets, clear the LED colors array (all off)
@@ -1107,7 +998,7 @@ private:
 
 /* This example shows how to display a moving rainbow pattern on
  * an APA102-based LED strip. */
-class BackgroundLedAnimations::Rainbow : public LedLayer
+class BackgroundLedAnimations::Rainbow : public BackgroundLayer
 {
     uint8_t lastTime = 0xFF;
 
@@ -1129,7 +1020,7 @@ class BackgroundLedAnimations::Rainbow : public LedLayer
         return true;
     }
 
-    virtual void combine(rgba_color *colors) const override
+    virtual void combine(Leds &colors) const override
     {
         for (uint16_t i = 0; i < LED_COUNT; i++)
         {

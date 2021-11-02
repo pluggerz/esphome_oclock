@@ -41,11 +41,6 @@ public:
 
 MasterLifecycle::LoopFunc MasterLifecycle::loopFunc_{};
 
-
-void oclock::Master::reset()    {
-    MasterLifecycle::change_to_init();
-}
-
 void oclock::ChannelRequest::send_raw(const UartMessage *msg, const byte length)
 {
     uart.send_raw(msg, length);
@@ -251,13 +246,13 @@ void MasterLifecycle::change_to_accepting()
 
 void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
 {
-#define FINAL_REQUEST()                        \
-    {                                          \
-        if (request)                           \
-        {                                      \
-            request->finalize();               \
-            delete request;                    \
-        }                                      \
+#define FINAL_REQUEST()                       \
+    {                                         \
+        if (request)                          \
+        {                                     \
+            request->finalize();              \
+            delete request;                   \
+        }                                     \
         MasterLifecycle::change_to_serving(); \
     }
 
@@ -320,7 +315,7 @@ void MasterLifecycle::change_to_serving()
         {
         case MsgType::MSG_LOG:
         case MsgType::MSG_POS_REQUEST:
-            LOG_MESSAGEW("should not happen!?", msg);
+            LOG_MESSAGEW("should not happen!?", msg, -1);
             return false;
 
         default:
@@ -391,6 +386,17 @@ public:
 void oclock::queue(oclock::BroadcastRequest *request)
 {
     queue(new CallbackRequest(request));
+}
+
+void oclock::Master::reset()
+{
+    AsyncRegister::byName("time_tracker", nullptr);
+    while (!open_requests.empty())
+    {
+        delete open_requests.back();
+        open_requests.pop_back();
+    }
+    MasterLifecycle::change_to_init();
 }
 
 #endif

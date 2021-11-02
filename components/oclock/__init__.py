@@ -188,6 +188,7 @@ async def to_code(config):
 
     await cg_add_switch("oclock_speed_check032", cg.RawExpression("new oclock::SpeedCheckSwitch32()"))
     await cg_add_switch("oclock_speed_check064", cg.RawExpression("new oclock::SpeedCheckSwitch64()"))
+    await cg_add_switch("oclock_speed_adapt", cg.RawExpression("new oclock::SpeedAdaptTestSwitch()"))
     
     await cg_add_switch("oclock_track_test_time", cg.RawExpression("new oclock::TrackTestTime()"))
     await cg_add_switch("oclock_track_hassio_time", cg.RawExpression("new oclock::TrackHassioTime()"))

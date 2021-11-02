@@ -101,8 +101,8 @@ public:
 struct UartLogMessage : public UartMessage
 {
 public:
-  char buffer[32];
-  static uint8_t length() { return 32; }
+  char buffer[24];
+  static uint8_t length() { return 24; }
   uint8_t part;
   uint8_t total_parts;
   bool overflow;
@@ -221,23 +221,24 @@ public:
   }
 
 #ifdef AVR
-#define LOG_MESSAGED(what, msg)
+#define LOG_MESSAGED(what, msg, length)
 #else
-#define LOG_MESSAGED(what, msg) InteropStringifier::logMessage(ESPHOME_LOG_LEVEL_DEBUG, TAG, __LINE__, F(what), msg)
+#define LOG_MESSAGED(what, msg, length) InteropStringifier::logMessage(ESPHOME_LOG_LEVEL_DEBUG, TAG, __LINE__, F(what), msg, length)
 #endif
-#define LOG_MESSAGEI(what, msg) InteropStringifier::logMessage(ESPHOME_LOG_LEVEL_INFO, TAG, __LINE__, F(what), msg)
-#define LOG_MESSAGEW(what, msg) InteropStringifier::logMessage(ESPHOME_LOG_LEVEL_WARN, TAG, __LINE__, F(what), msg)
+#define LOG_MESSAGEI(what, msg, length) InteropStringifier::logMessage(ESPHOME_LOG_LEVEL_INFO, TAG, __LINE__, F(what), msg, length)
+#define LOG_MESSAGEW(what, msg, length) InteropStringifier::logMessage(ESPHOME_LOG_LEVEL_WARN, TAG, __LINE__, F(what), msg, length)
 
-  static void logMessage(int level, const char *tag, int line, const __FlashStringHelper *pre, const UartMessage *msg)
+  static void logMessage(int level, const char *tag, int line, const __FlashStringHelper *pre, const UartMessage *msg, int length)
   {
     switch (msg->getMsgType())
     {
-#define DEF_PRINT(STR, ...)                                  \
-  esp_log_printf_(level, tag, line, F("%S: [%S>%S@%S]" STR), \
-                  pre,                                       \
-                  asIdF(msg->getSourceId()),                 \
-                  asF(msg->getMsgType()),                    \
-                  asIdF(msg->getDstId()),                    \
+#define DEF_PRINT(STR, ...)                                      \
+  esp_log_printf_(level, tag, line, F("%S[%d]: [%S>%S@%S]" STR), \
+                  pre,                                           \
+                  length,                                        \
+                  asIdF(msg->getSourceId()),                     \
+                  asF(msg->getMsgType()),                        \
+                  asIdF(msg->getDstId()),                        \
                   __VA_ARGS__)
 
     case MSG_ID_ACCEPT:
@@ -320,21 +321,21 @@ protected:
     auto msg = (const UartMessage *)bytes;
     if (msg->getSourceId() == owner_id_)
     {
-      LOG_MESSAGED("ignored (mine)", msg);
+      LOG_MESSAGED("ignored (mine)", msg, length);
     }
     else if (!for_me(msg->getDstId())) //(owner_id_ != 0xFF) && (msg->getDstId() != owner_id_) && (msg->getDstId() != ALL_SLAVES))
     {
-      LOG_MESSAGED("ignored (not for me)", msg);
+      LOG_MESSAGED("ignored (not for me)", msg, length);
     }
     else
     {
       if (msg->getMsgType() == MsgType::MSG_LOG || msg->getMsgType() == MsgType::MSG_DUMP_LOG_REQUEST)
-        LOG_MESSAGED("do", msg);
+        LOG_MESSAGED("do", msg, length);
       else
-        LOG_MESSAGED("do", msg);
+        LOG_MESSAGED("do", msg, length);
       bool accepted = listener_ ? listener_(msg) : false;
       if (!accepted)
-        LOG_MESSAGEW("not accepted!?", msg);
+        LOG_MESSAGEW("not accepted!?", msg, length);
     }
   }
 
@@ -346,9 +347,9 @@ public:
   void send_raw(const UartMessage *msg, int bytes)
   {
     if (msg->getMsgType() == MsgType::MSG_DUMP_LOG_REQUEST)
-      LOG_MESSAGED("send", msg);
+      LOG_MESSAGED("send", msg, bytes);
     else
-      LOG_MESSAGEI("send", msg);
+      LOG_MESSAGEI("send", msg, bytes);
     _send((byte *)msg, bytes);
   }
 

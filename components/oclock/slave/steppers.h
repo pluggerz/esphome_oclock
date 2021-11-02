@@ -4,29 +4,51 @@
 #include "steps_executor.h"
 #include "pins.h"
 
-volatile int completedFirstHits = 2;
-volatile int completedSecondHits = 2;
-volatile int completedThirdHits = 2;
+struct Completed
+{
+    // lets  save some space
+    uint8_t FirstHits : 2;
+    uint8_t SecondHits : 2;
+    uint8_t ThirdHits : 2;
+
+    Completed()
+    {
+        FirstHits = 2;
+        SecondHits = 2;
+        ThirdHits = 2;
+    }
+} volatile completed;
+
+struct Hit
+{
+    // lets  save some space
+    uint8_t FirstTime : 1;
+    uint8_t SecondTime : 1;
+    uint8_t ThirdTime : 1;
+
+    Hit()
+    {
+        FirstTime = true;
+        SecondTime = true;
+        ThirdTime = true;
+    }
+};
 
 template <class S>
 class PreMainMode final
 {
 private:
-    S &stepper;
-
     // our administration
-    bool hitFirstTime = true;
-    bool hitSecondTime = true;
-    bool hitThirdTime = true;
-
-    int stepOutSteps = 0;
-    static const int searchSpeed = 24;
-    int initial_ticks_;
-
+    Hit hit;
+    static const uint8_t searchSpeed = 20;
+    int16_t stepOutSteps = 0;
+    S &stepper;
+    int16_t initial_ticks_;
+    
 public:
     bool busy() const
     {
-        return completedThirdHits != 2;
+        return completed.ThirdHits != 2;
     }
 
     bool set_initial_ticks(int value)
@@ -39,17 +61,17 @@ public:
 
     void reset()
     {
-        if (hitFirstTime)
-            --completedFirstHits;
-        if (hitSecondTime)
-            --completedSecondHits;
-        if (hitThirdTime)
-            --completedThirdHits;
+        if (hit.FirstTime)
+            --completed.FirstHits;
+        if (hit.SecondTime)
+            --completed.SecondHits;
+        if (hit.ThirdTime)
+            --completed.ThirdHits;
 
-        hitFirstTime = false;
+        hit.FirstTime = false;
         stepOutSteps = NUMBER_OF_STEPS / 6;
-        hitSecondTime = false;
-        hitThirdTime = false;
+        hit.SecondTime = false;
+        hit.ThirdTime = false;
 
         // always from the same side, to make sure we stop the same way
         stepper.set_speed_in_revs_per_minute(+searchSpeed);
@@ -68,27 +90,27 @@ public:
     void loop(Micros now)
     {
         //
-        if (hitThirdTime == true)
+        if (hit.ThirdTime == true)
         {
-            if (completedThirdHits == 2)
+            if (completed.ThirdHits == 2)
             {
                 StepExecutors::loop(now);
             }
             return;
         }
-        else if (hitFirstTime == false)
+        else if (hit.FirstTime == false)
         {
             if (!stepper.is_magnet_tick())
             {
                 return;
             }
-            completedFirstHits++;
-            hitFirstTime = true;
+            completed.FirstHits++;
+            hit.FirstTime = true;
             stepper.set_speed_in_revs_per_minute(-searchSpeed / 3);
         }
         else if (stepOutSteps > 0)
         {
-            if (completedFirstHits != 2)
+            if (completed.FirstHits != 2)
             {
                 return;
             }
@@ -101,21 +123,22 @@ public:
                 stepper.set_speed_in_revs_per_minute(+searchSpeed / 1);
             }
         }
-        else if (hitSecondTime == false)
+        else if (hit.SecondTime == false)
         {
             if (stepper.is_magnet_tick())
             {
-                hitSecondTime = true;
-                completedSecondHits++;
+                hit.SecondTime = true;
+                completed.SecondHits++;
                 stepper.set_speed_in_revs_per_minute(-searchSpeed / 1);
             }
         }
-        else if (hitThirdTime == false)
+        else if (hit.ThirdTime == false)
         {
             if (stepper.ticks() == stepper.range(initial_ticks_))
             {
-                hitThirdTime = true;
-                completedThirdHits++;
+                hit.ThirdTime = true;
+                stepper.sync();
+                completed.ThirdHits++;
             }
             else
             {

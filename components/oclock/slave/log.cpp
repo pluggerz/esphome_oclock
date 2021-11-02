@@ -5,7 +5,7 @@
 
 template <uint16_t SIZE>
 class RingBuffer
-{
+{ 
     volatile uint16_t writeIndex, readIndex, bufferLength;
     volatile bool overflow_{false};
     char buffer[SIZE];
@@ -105,8 +105,8 @@ public:
 
 class SlaveLogger : public LogExtractor
 {
-#define LOG_TMP_BUFFER_SIZE 32
-    RingBuffer<350> buffer;
+#define LOG_TMP_BUFFER_SIZE 58
+    RingBuffer<250> buffer;
     char output_buffer[LOG_TMP_BUFFER_SIZE];
     bool enabled{true};
 

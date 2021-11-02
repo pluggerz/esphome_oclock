@@ -78,10 +78,15 @@ public:
 class HandleCmd
 {
 public:
+    inline bool ignorable() const
+    {
+        return handleId == -1;
+    }
     int handleId;
     Cmd cmd;
     int orderId;
     inline uint8_t speed() const { return cmd.speed; }
+    HandleCmd() : handleId(-1), cmd(Cmd()), orderId(-1) {}
     HandleCmd(int handleId, Cmd cmd, int orderId) : handleId(handleId), cmd(cmd), orderId(orderId) {}
 };
 
@@ -188,11 +193,11 @@ public:
              timers[(S + 19) * 2 + 0], timers[(S + 19) * 2 + 1]);
 
         DRAW_ROW(0);
-        DRAW_ROW2(0);
+        //DRAW_ROW2(0);
         DRAW_ROW(2);
-        DRAW_ROW2(2);
+        //DRAW_ROW2(2);
         DRAW_ROW(4);
-        DRAW_ROW2(4);
+        //DRAW_ROW2(4);
 #undef DRAW_ROW
         //INFO("visibilityFlags: " << std::bitset<MAX_HANDLES>(visibilityFlags.raw()));
         //INFO("nonOverlappingFlags: " << std::bitset<MAX_HANDLES>(nonOverlappingFlags.raw()));
@@ -216,10 +221,15 @@ public:
     }
 };
 
+#include <map>
+
 class Instructions : public HandlesState
 {
 public:
+    static const bool send_relative;
     std::vector<HandleCmd> cmds;
+    std::map<int, Cmd *> last_cmd_by_handle_id;
+    bool swap_speed_detection = true;
 
     Instructions()
     {
@@ -252,35 +262,114 @@ public:
 
     void add(int handle_id, const Cmd &cmd)
     {
-        int stepsOrPos = cmd.steps;
-        const auto relativePosition = (cmd.mode & CmdEnum::ABSOLUTE) == 0;
-
-        if (relativePosition && stepsOrPos == 0)
+        if (cmd.steps == 0 && (cmd.mode & CmdEnum::ABSOLUTE) == 0)
         {
             // ignore, since we are talking about steps
             return;
         }
+
+        if (!send_relative)
+            add_postprocess(handle_id, as_absolute_cmd(handle_id, cmd), false);
+        else
+            add_postprocess(handle_id, as_relative_cmd(handle_id, cmd), true);
+    }
+
+    inline Cmd as_relative_cmd(const int handle_id, const Cmd &cmd)
+    {
+        const auto relativePosition = (cmd.mode & CmdEnum::ABSOLUTE) == 0;
+        if (relativePosition)
+            return cmd;
+
+        // make relative
+        const auto from_tick = tickz[handle_id];
+        const auto to_tick = cmd.steps;
+        const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
+        return Cmd(
+            cmd.mode - CmdEnum::ABSOLUTE,
+            clockwise ? Distance::clockwise(from_tick, to_tick) : Distance::antiClockwise(from_tick, to_tick),
+            cmd.speed);
+    }
+
+    void add_postprocess(int handle_id, const Cmd &cmd, bool relative)
+    {
+        Cmd *last_cmd = last_cmd_by_handle_id[handle_id];
+        if (!last_cmd)
+        {
+            add_(handle_id, cmd, relative);
+            return;
+        }
+        auto last_direction = last_cmd->mode & CmdEnum::CLOCKWISE;
+        auto direction = cmd.mode & CmdEnum::CLOCKWISE;
+
+        const int reverse_steps = 6;
+        const int reverse_min_speed = 4;
+        if (last_direction == direction || max(last_cmd->speed, cmd.speed) <= reverse_min_speed)
+        {
+            // same direction or we are not that fast...
+            add_(handle_id, cmd, relative);
+            return;
+        }
+
+        auto last_ghosting = last_cmd->mode & CmdEnum::GHOST;
+        auto ghosting = cmd.mode & CmdEnum::GHOST;
+        if (!last_ghosting && !ghosting && swap_speed_detection)
+        {
+            last_cmd->mode |= CmdEnum::SWAP_SPEED;
+        }
+        add_(handle_id, cmd, relative);
+    }
+
+    inline Cmd as_absolute_cmd(const int handle_id, const Cmd &cmd)
+    {
+        const auto relativePosition = (cmd.mode & CmdEnum::ABSOLUTE) == 0;
+        if (!relativePosition)
+        {
+            // remove the flag, and normalize the steps to be sure
+            return Cmd(
+                cmd.mode - CmdEnum::ABSOLUTE,
+                Ticks::normalize(cmd.steps),
+                cmd.speed);
+        }
+        if (cmd.steps > NUMBER_OF_STEPS)
+        {
+            ESP_LOGE(TAG, "Unable to convert relative to absolute since cmd.steps=%d", cmd.steps);
+        }
+        // make absolute
+        const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
+        return Cmd(
+            cmd.mode,
+            Ticks::normalize(tickz[handle_id] + (clockwise ? cmd.steps : -cmd.steps)),
+            cmd.speed);
+    }
+
+    /***
+     * NOTE: cmd is relative
+     */
+    void add_(int handle_id, const Cmd &cmd, bool relative)
+    {
         // calculate time
         timers[handle_id] += cmd.time();
         cmds.push_back(HandleCmd(handle_id, cmd, cmds.size()));
+        last_cmd_by_handle_id[handle_id] = &cmds.back().cmd;
         const auto ghosting = (cmd.mode & CmdEnum::GHOST) != 0;
         if (ghosting)
             // stable ;P, just make sure time is aligned
             return;
 
         const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
-        
+
         auto &current = tickz[handle_id];
-        if (!relativePosition)
-            current = Ticks::normalize(stepsOrPos);
-        else if (current >= 0)
+        if (current < 0)
         {
-            current += clockwise ? stepsOrPos : -stepsOrPos;
-            current = Ticks::normalize(current);
+            ESP_LOGE(TAG, "Mmmm I think you did something wrong... hanlde_id=%d has no known state!?", handle_id);
+        }
+        else if (relative)
+        {
+            current = Ticks::normalize(current + (clockwise ? cmd.steps : -cmd.steps));
         }
         else
         {
-            ESP_LOGE(TAG, "Mmmm I think you did something wrong... hanlde_id=%d has no known state!?", handle_id);
+            current = cmd.steps;
         }
     };
 };
