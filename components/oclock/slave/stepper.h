@@ -12,7 +12,7 @@ typedef int16_t StepInt;
 typedef int8_t SpeedInRevsPerMinuteInt;
 
 constexpr int16_t pulse_time = 40;
-constexpr bool speed_up = false;
+constexpr bool speed_up = true;
 
 template <uint8_t stepPin, uint8_t dirPin, uint8_t centerPin>
 class Stepper final
@@ -28,7 +28,6 @@ public:
 
   bool ghost = false;
   volatile bool defecting = false;
-  int16_t defecting_crc{0};
   StepInt offset_steps_{0};
   int8_t direction = 0;
   int16_t step_delay = 100; // delay between steps, in micros, based on speed
@@ -71,7 +70,7 @@ public:
   }
 
 public:
-  const uint8_t slowest_revs_per_minute = 4;
+  uint8_t turn_speed_in_revs_per_minute = 4;
   Stepper(StepInt number_of_steps) : number_of_steps(number_of_steps)
   {
   }
@@ -80,6 +79,8 @@ public:
   {
     return offset_steps_;
   }
+
+
 
   bool set_offset_steps(StepInt value)
   {
@@ -145,7 +146,7 @@ public:
     }
     this->direction = new_direction;
     if (speed_up)
-      this->step_current = calculate_step_delay(slowest_revs_per_minute);
+      this->step_current = calculate_step_delay(turn_speed_in_revs_per_minute);
     else
       this->step_current = step_delay;
     set_direction_pin(direction == 0 ? LOW : HIGH);
@@ -203,8 +204,6 @@ public:
         defect -= pulse_time;
         next_step_time += pulse_time;
       }
-      else
-        defecting_crc += pulse_time;
       this->last_step_time = now;
       return false;
     }
@@ -220,15 +219,13 @@ public:
       defect -= step_delay;
       next_step_time += step_delay;
     }
-    else
-      defecting_crc += step_delay;
     this->last_step_time = now;
     pulsing = true;
 
     if (speed_up)
     {
       // previous was faster
-      bool too_fast = defect < -step_on_fail_delay;
+      bool too_fast = last_step_time < next_step_time;
       if (step_current < step_on_fail_delay
           // previus was slower
           || step_current > step_delay)
@@ -293,7 +290,7 @@ public:
     this->step_current = 0;
     this->last_step_time = 0;
     this->first_step_time = 0;
-    this-> next_step_time = 0;
+    this->next_step_time = 0;
   }
 
   int16_t calculate_speed_in_revs_per_minute(const int16_t delay) const
@@ -322,7 +319,7 @@ public:
   {
     this->speed_in_revs_per_minute = value;
     this->step_delay = calculate_step_delay(value) - pulse_time;
-    this->step_on_fail_delay = max(calculate_step_delay(value * 2), 80) - pulse_time;
+    this->step_on_fail_delay = max(calculate_step_delay(value * 2.5), 90) - pulse_time;
     updateDirection(asDirection(speed_in_revs_per_minute));
   }
 
@@ -330,8 +327,8 @@ public:
   {
     ESP_LOGI(tag, "  T0=%d revs=%d def=%dms",
              (int)get_offset_steps(), (int)speed_in_revs_per_minute, int(defect / 1000));
-    ESP_LOGI(tag, "  %ld - %ld = %ld",
-             long(next_step_time), long(first_step_time), long(next_step_time - first_step_time));
+    //ESP_LOGI(tag, "  %ld - %ld = %ld",
+    //         long(next_step_time), long(first_step_time), long(next_step_time - first_step_time));
     ESP_LOGI(tag, "  %ld - %ld = %ld",
              long(last_step_time), long(first_step_time), long(last_step_time - first_step_time));
     ESP_LOGI(tag, "   donf=%d<dc=%d<d=%d",

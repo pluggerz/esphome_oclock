@@ -228,8 +228,9 @@ class Instructions : public HandlesState
 public:
     static const bool send_relative;
     std::vector<HandleCmd> cmds;
-    std::map<int, Cmd *> last_cmd_by_handle_id;
+    std::map<int, int> last_idx_cmd_by_handle_id;
     bool swap_speed_detection = true;
+    const int turn_speed{8};
 
     Instructions()
     {
@@ -292,29 +293,33 @@ public:
 
     void add_postprocess(int handle_id, const Cmd &cmd, bool relative)
     {
-        Cmd *last_cmd = last_cmd_by_handle_id[handle_id];
-        if (!last_cmd)
+        auto key = last_idx_cmd_by_handle_id.find(handle_id);
+        if (key == last_idx_cmd_by_handle_id.end())
         {
             add_(handle_id, cmd, relative);
             return;
         }
-        auto last_direction = last_cmd->mode & CmdEnum::CLOCKWISE;
+        Cmd &last_cmd = cmds[key->second].cmd;
+        auto last_direction = last_cmd.mode & CmdEnum::CLOCKWISE;
         auto direction = cmd.mode & CmdEnum::CLOCKWISE;
 
-        const int reverse_steps = 6;
-        const int reverse_min_speed = 4;
-        if (last_direction == direction || max(last_cmd->speed, cmd.speed) <= reverse_min_speed)
+        if (last_direction == direction)
+        {
+            add_(handle_id, cmd, relative);
+            return;
+        }
+        if (max(last_cmd.speed, cmd.speed) <= turn_speed)
         {
             // same direction or we are not that fast...
             add_(handle_id, cmd, relative);
             return;
         }
 
-        auto last_ghosting = last_cmd->mode & CmdEnum::GHOST;
+        auto last_ghosting = last_cmd.mode & CmdEnum::GHOST;
         auto ghosting = cmd.mode & CmdEnum::GHOST;
         if (!last_ghosting && !ghosting && swap_speed_detection)
         {
-            last_cmd->mode |= CmdEnum::SWAP_SPEED;
+            last_cmd.mode |= CmdEnum::SWAP_SPEED;
         }
         add_(handle_id, cmd, relative);
     }
@@ -349,8 +354,9 @@ public:
     {
         // calculate time
         timers[handle_id] += cmd.time();
+        last_idx_cmd_by_handle_id[handle_id] = cmds.size();
         cmds.push_back(HandleCmd(handle_id, cmd, cmds.size()));
-        last_cmd_by_handle_id[handle_id] = &cmds.back().cmd;
+
         const auto ghosting = (cmd.mode & CmdEnum::GHOST) != 0;
         if (ghosting)
             // stable ;P, just make sure time is aligned

@@ -36,8 +36,7 @@ public:
     }
 };
 
-const uint16_t reverse_steps = 40;
-
+const uint16_t reverse_steps = 3;
 
 template <class S>
 class Animator final
@@ -48,9 +47,9 @@ public:
     S *stepperPtr;
     AnimationKeys *keysPtr = nullptr;
     uint8_t idx = 0;
-    uint8_t swapping = 0;
+    uint8_t turning = 0;
     uint16_t steps = 0;
-    
+
     void followSeconds(Micros now, bool discrete)
     {
         Millis delta = now / 1000 - t0;
@@ -112,35 +111,54 @@ public:
         }
         const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
         const auto swap_speed = (cmd.mode & CmdEnum::SWAP_SPEED) != 0;
-        if (swapping == 0)
+        int eat_steps = 0;
+        if (turning == 0)
         {
             stepper.set_defecting(false);
+            if (animation_steps_are_relative)
+            {
+                auto was_swap_speed = idx > 0 && ((keys[idx - 1].mode & CmdEnum::SWAP_SPEED) != 0);
+                if (was_swap_speed)
+                {
+                    // speed up
+                    auto steps_now = cmd.steps;
+                    auto steps_previous = keys[idx - 1].steps;
+                    eat_steps += min(reverse_steps, min(steps_now, steps_previous));
+                }
+            }
             if (swap_speed)
             {
-                swapping = 2;
+                turning = 2;
+                if (animation_steps_are_relative)
+                {
+                    // slow down
+                    auto steps_now = cmd.steps;
+                    auto steps_next = keys[idx + 1].steps;
+                    eat_steps += min(reverse_steps, min(steps_now, steps_next));
+                }
             }
             else
             {
                 idx++;
             }
         }
-        else if (swapping == 2)
+        else if (turning == 2)
         {
             stepper.set_defecting(true);
             ESP_LOGD(TAG, "Sp down");
-            --swapping;
+            --turning;
 
             steps = reverse_steps * STEP_MULTIPLIER;
-            auto speed = stepper.slowest_revs_per_minute;
+            auto speed = stepper.turn_speed_in_revs_per_minute;
             stepper.set_speed_in_revs_per_minute(clockwise ? speed : -speed);
 
             ++idx;
             return;
         }
-        else if (swapping == 1)
+        else if (turning == 1)
         {
             ESP_LOGD(TAG, "Sp up %d", (int)cmd.speed);
-            --swapping;
+            --turning;
             steps = reverse_steps * STEP_MULTIPLIER;
             stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed : -cmd.speed);
             return;
@@ -150,21 +168,15 @@ public:
         auto current = stepper.ticks();
         if (animation_steps_are_relative)
         {
-            steps = cmd.steps * STEP_MULTIPLIER;
+            steps = (cmd.steps - eat_steps) * STEP_MULTIPLIER;
             ESP_LOGD(TAG, "E gh=%d s=%d cw=%d s=%d", (int)ghosting, (int)steps, (int)clockwise, (int)cmd.speed);
         }
         else
         {
             auto goal = cmd.steps * STEP_MULTIPLIER;
             ESP_LOGD(TAG, "E gh=%d g=%d cw=%d s=%d", (int)ghosting, (int)goal, (int)clockwise, (int)cmd.speed);
-            if (current == goal)
-            {
-                steps = NUMBER_OF_STEPS;
-            }
-            else
-            {
-                steps = clockwise ? Distance::clockwise(current, goal) : Distance::antiClockwise(current, goal);
-            }
+            steps = current == goal ? NUMBER_OF_STEPS : clockwise ? Distance::clockwise(current, goal)
+                                                                  : Distance::antiClockwise(current, goal);
         }
         stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed : -cmd.speed);
     }
@@ -183,7 +195,7 @@ public:
         this->millisLeft = millisLeft;
         this->idx = 0;
         this->steps = 0;
-        this->swapping = 0;
+        this->turning = 0;
         stepperPtr->sync();
     }
 };
@@ -220,7 +232,12 @@ void StepExecutors::process_begin_keys(const UartMessage *msg)
 void StepExecutors::process_end_keys(const UartEndKeysMessage *msg)
 {
     animation_steps_are_relative = msg->relative;
+
+    stepper0.turn_speed_in_revs_per_minute = msg->turn_speed;
+    stepper1.turn_speed_in_revs_per_minute = msg->turn_speed;
+
     cmdSpeedUtil.set_speeds(msg->speed_map);
+
     animator0.start(&animationKeysArray[0], 1);
     animator1.start(&animationKeysArray[1], 1);
 }

@@ -54,12 +54,14 @@ struct UartEndKeysMessage : public UartMessage
 public:
     bool relative;
     u16 numberOfMillisLeft;
+    uint8_t turn_speed;
     uint8_t speed_map[8];
 
-    UartEndKeysMessage(bool relative, const uint8_t (&speed_map)[8], u16 numberOfMillisLeft)
+    UartEndKeysMessage(bool relative, const uint8_t turn_speed,  const uint8_t (&speed_map)[8], u16 numberOfMillisLeft)
         : UartMessage(-1, MSG_END_KEYS, ALL_SLAVES),
           relative(relative),
-          numberOfMillisLeft(numberOfMillisLeft)
+          numberOfMillisLeft(numberOfMillisLeft),
+          turn_speed(turn_speed)
     {
         for (int idx = 0; idx < 8; ++idx)
         {

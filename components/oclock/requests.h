@@ -162,7 +162,10 @@ namespace oclock
                 instructions.dump();
                 // finalize
                 u16 millisLeft = 1; //(60 - t.seconds) * 1000 + (1000 - t.millis);
-                send(UartEndKeysMessage(instructions.send_relative, cmdSpeedUtil.get_speeds(), millisLeft));
+                send(UartEndKeysMessage(instructions.send_relative, 
+                instructions.turn_speed,
+                cmdSpeedUtil.get_speeds(), 
+                millisLeft));
             }
 
         public:
@@ -179,15 +182,16 @@ namespace oclock
             virtual void finalize() override final
             {
                 Instructions instructions;
-                for (int idx = 0; idx < 2; ++idx)
+                int speed=16;
+                for (int idx = 0; idx < 4; ++idx)
                 {
                     instructions.swap_speed_detection = true;
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 360, 8));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, 8));
+                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
 
                     instructions.swap_speed_detection = false;
-                    instructions.add(20 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 360, 8));
-                    instructions.add(20 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, 8));
+                    instructions.add(20 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
                     // instructions.add(20 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
 
                     //instructions.swap_speed_detection = false;
