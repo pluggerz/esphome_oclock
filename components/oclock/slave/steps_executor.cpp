@@ -109,8 +109,8 @@ public:
         {
             return;
         }
-        const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
-        const auto swap_speed = (cmd.mode & CmdEnum::SWAP_SPEED) != 0;
+        const auto clockwise = cmd.clockwise();
+        const auto swap_speed =cmd.swap_speed();
         int eat_steps = 0;
         if (turning == 0)
         {
@@ -157,7 +157,7 @@ public:
         }
         else if (turning == 1)
         {
-            ESP_LOGD(TAG, "Sp up %d", (int)cmd.speed);
+            ESP_LOGD(TAG, "Sp up %d", (int)cmd.speed());
             --turning;
             steps = reverse_steps * STEP_MULTIPLIER;
             stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed : -cmd.speed);
@@ -169,6 +169,7 @@ public:
         if (animation_steps_are_relative)
         {
             steps = (cmd.steps - eat_steps) * STEP_MULTIPLIER;
+            //TODO: should correct timings for 'eat_steps'
             ESP_LOGD(TAG, "E gh=%d s=%d cw=%d s=%d", (int)ghosting, (int)steps, (int)clockwise, (int)cmd.speed);
         }
         else

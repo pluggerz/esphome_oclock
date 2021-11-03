@@ -33,7 +33,6 @@ public:
   int16_t step_delay = 100; // delay between steps, in micros, based on speed
   int16_t step_on_fail_delay = 80;
   int16_t step_current = 0;
-  int16_t defect = 0;
   bool pulsing = false; // currently pulsing
   SpeedInRevsPerMinuteInt speed_in_revs_per_minute = 1;
 
@@ -187,21 +186,21 @@ public:
       return false;
     }
 
+    const bool too_fast = last_step_time - next_step_time < 0;
     const int16_t diff = now - this->last_step_time;
     if (pulsing)
     {
       // pulsing can be very short
-      if (diff < (defect < 0 ? pulse_time : pulse_time >> 1))
+      //bool too_fast = last_step_time < next_step_time;
+      if (diff < (too_fast ? pulse_time : pulse_time >> 1))
       {
         return false;
       }
       this->pulsing = false;
       set_step_pin(LOW);
 
-      defect += diff;
       if (!defecting)
       {
-        defect -= pulse_time;
         next_step_time += pulse_time;
       }
       this->last_step_time = now;
@@ -213,10 +212,8 @@ public:
       // we need to wait
       return false;
     }
-    defect += diff;
     if (!defecting)
     {
-      defect -= step_delay;
       next_step_time += step_delay;
     }
     this->last_step_time = now;
@@ -225,7 +222,7 @@ public:
     if (speed_up)
     {
       // previous was faster
-      bool too_fast = last_step_time < next_step_time;
+      //bool too_fast = last_step_time < next_step_time;
       if (step_current < step_on_fail_delay
           // previus was slower
           || step_current > step_delay)
@@ -286,7 +283,6 @@ public:
 
   void sync()
   {
-    this->defect = 0;
     this->step_current = 0;
     this->last_step_time = 0;
     this->first_step_time = 0;
@@ -325,8 +321,8 @@ public:
 
   void dump_config(const __FlashStringHelper *tag)
   {
-    ESP_LOGI(tag, "  T0=%d revs=%d def=%dms",
-             (int)get_offset_steps(), (int)speed_in_revs_per_minute, int(defect / 1000));
+    ESP_LOGI(tag, "  T0=%d revs=%d",
+             (int)get_offset_steps(), (int)speed_in_revs_per_minute);
     //ESP_LOGI(tag, "  %ld - %ld = %ld",
     //         long(next_step_time), long(first_step_time), long(next_step_time - first_step_time));
     ESP_LOGI(tag, "  %ld - %ld = %ld",

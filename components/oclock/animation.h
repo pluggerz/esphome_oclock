@@ -85,7 +85,7 @@ public:
     int handleId;
     Cmd cmd;
     int orderId;
-    inline uint8_t speed() const { return cmd.speed; }
+    inline uint8_t speed() const { return cmd.speed(); }
     HandleCmd() : handleId(-1), cmd(Cmd()), orderId(-1) {}
     HandleCmd(int handleId, Cmd cmd, int orderId) : handleId(handleId), cmd(cmd), orderId(orderId) {}
 };
@@ -263,7 +263,7 @@ public:
 
     void add(int handle_id, const Cmd &cmd)
     {
-        if (cmd.steps == 0 && (cmd.mode & CmdEnum::ABSOLUTE) == 0)
+        if (cmd.steps() == 0 && cmd.relative())
         {
             // ignore, since we are talking about steps
             return;
@@ -277,18 +277,17 @@ public:
 
     inline Cmd as_relative_cmd(const int handle_id, const Cmd &cmd)
     {
-        const auto relativePosition = (cmd.mode & CmdEnum::ABSOLUTE) == 0;
+        const auto relativePosition = cmd.relative();
         if (relativePosition)
             return cmd;
 
         // make relative
         const auto from_tick = tickz[handle_id];
-        const auto to_tick = cmd.steps;
-        const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
+        const auto to_tick = cmd.steps();
         return Cmd(
-            cmd.mode - CmdEnum::ABSOLUTE,
-            clockwise ? Distance::clockwise(from_tick, to_tick) : Distance::antiClockwise(from_tick, to_tick),
-            cmd.speed);
+            cmd.mode() - CmdEnum::ABSOLUTE,
+            cmd.clockwise() ? Distance::clockwise(from_tick, to_tick) : Distance::antiClockwise(from_tick, to_tick),
+            cmd.speed());
     }
 
     void add_postprocess(int handle_id, const Cmd &cmd, bool relative)
@@ -300,51 +299,50 @@ public:
             return;
         }
         Cmd &last_cmd = cmds[key->second].cmd;
-        auto last_direction = last_cmd.mode & CmdEnum::CLOCKWISE;
-        auto direction = cmd.mode & CmdEnum::CLOCKWISE;
+        auto last_direction = last_cmd.clockwise();
+        auto direction = cmd.clockwise();
 
         if (last_direction == direction)
         {
             add_(handle_id, cmd, relative);
             return;
         }
-        if (max(last_cmd.speed, cmd.speed) <= turn_speed)
+        if (max(last_cmd.speed(), cmd.speed()) <= turn_speed)
         {
             // same direction or we are not that fast...
             add_(handle_id, cmd, relative);
             return;
         }
 
-        auto last_ghosting = last_cmd.mode & CmdEnum::GHOST;
-        auto ghosting = cmd.mode & CmdEnum::GHOST;
+        auto last_ghosting = last_cmd.ghost();
+        auto ghosting = cmd.ghost();
         if (!last_ghosting && !ghosting && swap_speed_detection)
         {
-            last_cmd.mode |= CmdEnum::SWAP_SPEED;
+            last_cmd.value.modeKey.mode |= CmdEnum::SWAP_SPEED;
         }
         add_(handle_id, cmd, relative);
     }
 
     inline Cmd as_absolute_cmd(const int handle_id, const Cmd &cmd)
     {
-        const auto relativePosition = (cmd.mode & CmdEnum::ABSOLUTE) == 0;
+        const auto relativePosition = cmd.relative();
         if (!relativePosition)
         {
             // remove the flag, and normalize the steps to be sure
             return Cmd(
-                cmd.mode - CmdEnum::ABSOLUTE,
-                Ticks::normalize(cmd.steps),
-                cmd.speed);
+                cmd.mode() - CmdEnum::ABSOLUTE,
+                Ticks::normalize(cmd.steps()),
+                cmd.speed());
         }
-        if (cmd.steps > NUMBER_OF_STEPS)
+        if (cmd.steps() > NUMBER_OF_STEPS)
         {
-            ESP_LOGE(TAG, "Unable to convert relative to absolute since cmd.steps=%d", cmd.steps);
+            ESP_LOGE(TAG, "Unable to convert relative to absolute since cmd.steps=%d", cmd.steps());
         }
         // make absolute
-        const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
         return Cmd(
-            cmd.mode,
-            Ticks::normalize(tickz[handle_id] + (clockwise ? cmd.steps : -cmd.steps)),
-            cmd.speed);
+            cmd.mode(),
+            Ticks::normalize(tickz[handle_id] + (cmd.clockwise() ? cmd.steps() : -cmd.steps())),
+            cmd.speed());
     }
 
     /***
@@ -357,12 +355,10 @@ public:
         last_idx_cmd_by_handle_id[handle_id] = cmds.size();
         cmds.push_back(HandleCmd(handle_id, cmd, cmds.size()));
 
-        const auto ghosting = (cmd.mode & CmdEnum::GHOST) != 0;
+        const auto ghosting = cmd.ghost();
         if (ghosting)
             // stable ;P, just make sure time is aligned
             return;
-
-        const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
 
         auto &current = tickz[handle_id];
         if (current < 0)
@@ -371,11 +367,11 @@ public:
         }
         else if (relative)
         {
-            current = Ticks::normalize(current + (clockwise ? cmd.steps : -cmd.steps));
+            current = Ticks::normalize(current + (cmd.clockwise() ? cmd.steps() : -cmd.steps()));
         }
         else
         {
-            current = cmd.steps;
+            current = cmd.steps();
         }
     };
 };

@@ -41,11 +41,11 @@ namespace oclock
                         for (std::size_t idx = 0; idx < nmbrOfCommands; ++idx)
                         {
                             const auto &cmd = msg.getCmd(idx);
-                            const auto ghosting = (cmd.mode & CmdEnum::GHOST) != 0;
-                            const auto steps = cmd.steps;
-                            const auto speed = cmd.speed;
-                            const auto clockwise = (cmd.mode & CmdEnum::CLOCKWISE) != 0;
-                            const auto swap_speed = (cmd.mode & CmdEnum::SWAP_SPEED) != 0;
+                            const auto ghosting = cmd.ghost();
+                            const auto steps = cmd.steps();
+                            const auto speed = cmd.speed();
+                            const auto clockwise = cmd.clockwise();
+                            const auto swap_speed = cmd.swap_speed();
                             const auto relativePosition = Instructions::send_relative;
                             ESP_LOGI(TAG, "Cmd: %s=%3d sp=%d gh=%s cl=%s (%f) sw=%s", ghosting || relativePosition ? "steps" : "   to", steps, speed, YESNO(ghosting), ghosting ? "N/A" : YESNO(clockwise), cmd.time(), YESNO(swap_speed));
                         }
@@ -182,7 +182,7 @@ namespace oclock
             virtual void finalize() override final
             {
                 Instructions instructions;
-                int speed=16;
+                int speed=32;
                 for (int idx = 0; idx < 4; ++idx)
                 {
                     instructions.swap_speed_detection = true;
