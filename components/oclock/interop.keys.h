@@ -24,12 +24,6 @@ public:
         return _size;
     }
 
-    /*
-    const InflatedCmdKey& operator[](int idx) const
-    {
-        return InflatedCmdKey::map(cmds[idx]);
-    }*/
-
     const uint16_t& operator[](int idx) const
     {
         return cmds[idx];
@@ -58,14 +52,12 @@ public:
 struct UartEndKeysMessage : public UartMessage
 {
 public:
-    bool relative;
     u16 numberOfMillisLeft;
     uint8_t turn_speed;
     uint8_t speed_map[8];
 
-    UartEndKeysMessage(bool relative, const uint8_t turn_speed,  const uint8_t (&speed_map)[8], u16 numberOfMillisLeft)
+    UartEndKeysMessage(const uint8_t turn_speed,  const uint8_t (&speed_map)[8], u16 numberOfMillisLeft)
         : UartMessage(-1, MSG_END_KEYS, ALL_SLAVES),
-          relative(relative),
           numberOfMillisLeft(numberOfMillisLeft),
           turn_speed(turn_speed)
     {

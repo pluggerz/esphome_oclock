@@ -162,10 +162,10 @@ namespace oclock
                 instructions.dump();
                 // finalize
                 u16 millisLeft = 1; //(60 - t.seconds) * 1000 + (1000 - t.millis);
-                send(UartEndKeysMessage(true, 
-                instructions.turn_speed,
-                cmdSpeedUtil.get_speeds(), 
-                millisLeft));
+                send(UartEndKeysMessage(
+                    instructions.turn_speed,
+                    cmdSpeedUtil.get_speeds(),
+                    millisLeft));
             }
 
         public:
@@ -182,7 +182,7 @@ namespace oclock
             virtual void finalize() override final
             {
                 Instructions instructions;
-                int speed=32;
+                int speed = 32;
                 for (int idx = 0; idx < 4; ++idx)
                 {
                     instructions.swap_speed_detection = true;

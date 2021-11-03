@@ -209,21 +209,21 @@ public:
         return fatKey.steps;
     }
 
-    Cmd(const InflatedCmdKey &raw)
+    Cmd(const InflatedCmdKey &_raw)
     {
-        fatKey.ghost = raw.value.ghost;
-        fatKey.clockwise = raw.value.clockwise;
-        fatKey.absolute = raw.value.absolute;
-        fatKey.speed = cmdSpeedUtil.deflate_speed(raw.value.speed);
-        fatKey.steps = raw.value.steps;
+        fatKey.ghost = _raw.value.ghost;
+        fatKey.clockwise = _raw.value.clockwise;
+        fatKey.absolute = _raw.value.absolute;
+        fatKey.speed = cmdSpeedUtil.deflate_speed(_raw.value.speed);
+        fatKey.steps = _raw.value.steps;
     }
 
 #ifdef MASTER_MODE
-    Cmd(int mode, u16 steps, u8 speed)
+    Cmd(int _mode, u16 _steps, u8 _speed)
     {
-        mode = (uint8_t)mode;
-        fatKey.speed = speed;
-        fatKey.steps = steps;
+        mode_ = (uint8_t)_mode;
+        fatKey.speed = _speed;
+        fatKey.steps = _steps;
     }
 
     double time() const
