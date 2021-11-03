@@ -117,12 +117,12 @@ public:
             stepper.set_defecting(false);
             if (animation_steps_are_relative)
             {
-                auto was_swap_speed = idx > 0 && ((keys[idx - 1].mode & CmdEnum::SWAP_SPEED) != 0);
+                auto was_swap_speed = idx > 0 && (keys[idx - 1].swap_speed());
                 if (was_swap_speed)
                 {
                     // speed up
-                    auto steps_now = cmd.steps;
-                    auto steps_previous = keys[idx - 1].steps;
+                    auto steps_now = cmd.steps();
+                    auto steps_previous = keys[idx - 1].steps();
                     eat_steps += min(reverse_steps, min(steps_now, steps_previous));
                 }
             }
@@ -132,8 +132,8 @@ public:
                 if (animation_steps_are_relative)
                 {
                     // slow down
-                    auto steps_now = cmd.steps;
-                    auto steps_next = keys[idx + 1].steps;
+                    auto steps_now = cmd.steps();
+                    auto steps_next = keys[idx + 1].steps();
                     eat_steps += min(reverse_steps, min(steps_now, steps_next));
                 }
             }
@@ -160,26 +160,26 @@ public:
             ESP_LOGD(TAG, "Sp up %d", (int)cmd.speed());
             --turning;
             steps = reverse_steps * STEP_MULTIPLIER;
-            stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed : -cmd.speed);
+            stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed() : -cmd.speed());
             return;
         }
-        const auto ghosting = (cmd.mode & CmdEnum::GHOST) != 0;
+        const auto ghosting = cmd.ghost();
         stepper.setGhosting(ghosting);
         auto current = stepper.ticks();
         if (animation_steps_are_relative)
         {
-            steps = (cmd.steps - eat_steps) * STEP_MULTIPLIER;
+            steps = (cmd.steps() - eat_steps) * STEP_MULTIPLIER;
             //TODO: should correct timings for 'eat_steps'
-            ESP_LOGD(TAG, "E gh=%d s=%d cw=%d s=%d", (int)ghosting, (int)steps, (int)clockwise, (int)cmd.speed);
+            ESP_LOGD(TAG, "E gh=%d s=%d cw=%d s=%d", (int)ghosting, (int)steps, (int)clockwise, (int)cmd.speed());
         }
         else
         {
-            auto goal = cmd.steps * STEP_MULTIPLIER;
-            ESP_LOGD(TAG, "E gh=%d g=%d cw=%d s=%d", (int)ghosting, (int)goal, (int)clockwise, (int)cmd.speed);
+            auto goal = cmd.steps() * STEP_MULTIPLIER;
+            ESP_LOGD(TAG, "E gh=%d g=%d cw=%d s=%d", (int)ghosting, (int)goal, (int)clockwise, (int)cmd.speed());
             steps = current == goal ? NUMBER_OF_STEPS : clockwise ? Distance::clockwise(current, goal)
                                                                   : Distance::antiClockwise(current, goal);
         }
-        stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed : -cmd.speed);
+        stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed() : -cmd.speed());
     }
 
 public:
