@@ -8,9 +8,6 @@ using namespace esphome;
 #include "animation.h"
 #include "ticks.h"
 
-const bool Instructions::send_relative{true};
-    
-
 typedef std::function<int(int from, int to)> StepCalculator;
 
 StepCalculator shortestPathCalculator = [](int from, int to)
