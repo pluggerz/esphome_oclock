@@ -4,7 +4,7 @@ bool animation_steps_are_relative = false;
 class AnimationKeys
 {
 private:
-    CmdInt cmds[MAX_ANIMATION_KEYS] = {};
+    InflatedCmdKey cmds[MAX_ANIMATION_KEYS] = {};
     uint8_t idx = 0;
 
 public:
@@ -32,7 +32,7 @@ public:
     void addAll(const UartKeysMessage &msg)
     {
         for (int i = 0; i < msg.size(); ++i)
-            cmds[idx++] = msg[i];
+            cmds[idx++] = InflatedCmdKey::map(msg[i]);
     }
 };
 

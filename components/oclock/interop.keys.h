@@ -38,12 +38,12 @@ public:
 #ifdef MASTER_MODE
     void setCmd(int idx, const Cmd &cmd)
     {
-        cmds[idx] = cmd.asRaw();
+        cmds[idx] = cmd.asInflatedCmdKey().raw;
     }
 #endif
     Cmd getCmd(int idx) const
     {
-        return Cmd(cmds[idx]);
+        return Cmd(InflatedCmdKey::map(cmds[idx]));
     }
 } __attribute__((packed, aligned(1)));
 
