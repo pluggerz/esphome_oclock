@@ -15,19 +15,6 @@ enum CmdEnum
 
 typedef uint16_t CmdInt;
 
-struct CmdKey
-{
-    // first 3 bits for mode
-    uint16_t ghost : 1,
-        clockwise : 1,
-        absolute : 1,
-        // next 3 bits for speed
-        speed : 3,
-        // next 10 steps for steps
-        steps : 10;
-    // which concludes: (1+1+1) + 3 + 10 = 16 bits
-};
-
 // mode ->  total: 3 bits
 #define MODE_WIDTH 3
 #define MODE_SHIFT 0
@@ -41,6 +28,58 @@ struct CmdKey
 #define STEPS_MASK ((1 << STEPS_WIDTH) - 1)
 #define MODE_MASK ((1 << MODE_WIDTH) - 1)
 #define SPEED_MASK ((1 << SPEED_WIDTH) - 1)
+
+struct InflatedCmdKey
+{
+    struct
+    {
+        // first 3 bits for mode
+        uint16_t ghost : 1,
+            clockwise : 1,
+            absolute : 1,
+            // next 3 bits for speed
+            speed : SPEED_WIDTH,
+                    // next 10 steps for steps
+                    steps : STEPS_WIDTH;
+        // which concludes: (1+1+1) + 3 + 10 = 16 bits
+    } value;
+
+
+    static const InflatedCmdKey& map(const uint16_t &raw)    {
+        const InflatedCmdKey* keyPtr=(const InflatedCmdKey*)&raw;
+        return *keyPtr;
+    }
+
+    inline bool clockwise() const
+    {
+        return value.clockwise;
+    }
+
+    bool absolute() const
+    {
+        return value.absolute;
+    }
+
+    inline bool swap_speed() const
+    {
+        return value.absolute;
+    }
+
+    inline bool ghost() const
+    {
+        return value.ghost;
+    }
+
+    inline int speed() const
+    {
+        return value.speed;
+    }
+
+    inline int steps() const
+    {
+        return value.steps;
+    }
+};
 
 enum CmdSpecialMode
 {
@@ -126,6 +165,7 @@ public:
 
     CmdInt asRaw() const
     {
+
         return (static_cast<CmdInt>(value.modeKey.mode & MODE_MASK) << MODE_SHIFT) |
                (static_cast<CmdInt>(cmdSpeedUtil.inflate_speed(value.modeKey.speed) & SPEED_MASK) << SPEED_SHIFT) |
                (static_cast<CmdInt>(value.modeKey.steps & STEPS_MASK) << STEPS_SHIFT);
@@ -136,54 +176,69 @@ public:
         value.rawKey = 0;
     }
 
-    bool clockwise()    const {
+    void set_swap_bit()
+    {
+        value.fatKey.absolute = true;
+    }
+
+    inline bool clockwise() const
+    {
         return value.fatKey.clockwise;
     }
 
-    bool absolute() const {
+    inline bool absolute() const
+    {
         return value.fatKey.absolute;
     }
 
-    inline bool relative() const {
+    inline bool relative() const
+    {
         return !absolute();
     }
 
-    inline bool swap_speed() const {
+    inline bool swap_speed() const
+    {
         return absolute();
     }
 
-    bool ghost() const {
+    inline bool ghost() const
+    {
         return value.fatKey.ghost;
     }
 
-    int speed() const {
+    inline int speed() const
+    {
         return value.modeKey.speed;
     }
 
-    int mode() const {
+    inline int mode() const
+    {
         return value.modeKey.mode;
     }
 
-    int steps() const {
+    inline int steps() const
+    {
         return value.fatKey.steps;
     }
 
+
     Cmd(CmdInt raw)
     {
-        value.fatKey.ghost = static_cast<uint8_t>((raw >> MODE_SHIFT) & CmdEnum::GHOST);
-        value.fatKey.clockwise = static_cast<uint8_t>((raw >> MODE_SHIFT) & CmdEnum::CLOCKWISE);
-        value.fatKey.absolute = static_cast<uint8_t>((raw >> MODE_SHIFT) & CmdEnum::ABSOLUTE);
-        value.fatKey.speed = cmdSpeedUtil.deflate_speed(static_cast<CmdInt>((raw >> SPEED_SHIFT) & SPEED_MASK));
-        value.fatKey.steps = static_cast<uint16_t>((raw >> STEPS_SHIFT) & STEPS_MASK);
+        InflatedCmdKey *rawPtr = (InflatedCmdKey *)&raw;
+        value.fatKey.ghost = rawPtr->value.ghost;
+        value.fatKey.clockwise = rawPtr->value.clockwise;
+        value.fatKey.absolute = rawPtr->value.absolute;
+        value.fatKey.speed = cmdSpeedUtil.deflate_speed(rawPtr->value.speed);
+        value.fatKey.steps = rawPtr->value.steps;
     }
 
-    Cmd(CmdKey raw)
+    Cmd(const InflatedCmdKey &raw)
     {
-        value.fatKey.ghost = raw.ghost;
-        value.fatKey.clockwise = raw.clockwise;
-        value.fatKey.absolute = raw.absolute;
-        value.fatKey.speed = cmdSpeedUtil.deflate_speed(raw.speed);
-        value.fatKey.steps = raw.steps;
+        value.fatKey.ghost = raw.value.ghost;
+        value.fatKey.clockwise = raw.value.clockwise;
+        value.fatKey.absolute = raw.value.absolute;
+        value.fatKey.speed = cmdSpeedUtil.deflate_speed(raw.value.speed);
+        value.fatKey.steps = raw.value.steps;
     }
 
 #ifdef MASTER_MODE

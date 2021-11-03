@@ -13,7 +13,7 @@ struct UartKeysMessage : public UartMessage
     // note we control the bits better ;P
 private:
     uint8_t _size;
-    CmdInt cmds[MAX_ANIMATION_KEYS_PER_MESSAGE] = {};
+    uint16_t cmds[MAX_ANIMATION_KEYS_PER_MESSAGE] = {};
 
 public:
     UartKeysMessage(uint8_t destination_id, uint8_t _size) : UartMessage(-1, MSG_SEND_KEYS, destination_id), _size(_size)
@@ -24,7 +24,13 @@ public:
         return _size;
     }
 
-    CmdInt operator[](int idx) const
+    /*
+    const InflatedCmdKey& operator[](int idx) const
+    {
+        return InflatedCmdKey::map(cmds[idx]);
+    }*/
+
+    const uint16_t& operator[](int idx) const
     {
         return cmds[idx];
     }

@@ -269,10 +269,7 @@ public:
             return;
         }
 
-        if (!send_relative)
-            add_postprocess(handle_id, as_absolute_cmd(handle_id, cmd), false);
-        else
-            add_postprocess(handle_id, as_relative_cmd(handle_id, cmd), true);
+        add_postprocess(handle_id, as_relative_cmd(handle_id, cmd));
     }
 
     inline Cmd as_relative_cmd(const int handle_id, const Cmd &cmd)
@@ -290,12 +287,12 @@ public:
             cmd.speed());
     }
 
-    void add_postprocess(int handle_id, const Cmd &cmd, bool relative)
+    void add_postprocess(int handle_id, const Cmd &cmd)
     {
         auto key = last_idx_cmd_by_handle_id.find(handle_id);
         if (key == last_idx_cmd_by_handle_id.end())
         {
-            add_(handle_id, cmd, relative);
+            add_(handle_id, cmd);
             return;
         }
         Cmd &last_cmd = cmds[key->second].cmd;
@@ -304,13 +301,13 @@ public:
 
         if (last_direction == direction)
         {
-            add_(handle_id, cmd, relative);
+            add_(handle_id, cmd);
             return;
         }
         if (max(last_cmd.speed(), cmd.speed()) <= turn_speed)
         {
             // same direction or we are not that fast...
-            add_(handle_id, cmd, relative);
+            add_(handle_id, cmd);
             return;
         }
 
@@ -318,41 +315,20 @@ public:
         auto ghosting = cmd.ghost();
         if (!last_ghosting && !ghosting && swap_speed_detection)
         {
-            last_cmd.value.modeKey.mode |= CmdEnum::SWAP_SPEED;
+            last_cmd.set_swap_bit();
         }
-        add_(handle_id, cmd, relative);
-    }
-
-    inline Cmd as_absolute_cmd(const int handle_id, const Cmd &cmd)
-    {
-        const auto relativePosition = cmd.relative();
-        if (!relativePosition)
-        {
-            // remove the flag, and normalize the steps to be sure
-            return Cmd(
-                cmd.mode() - CmdEnum::ABSOLUTE,
-                Ticks::normalize(cmd.steps()),
-                cmd.speed());
-        }
-        if (cmd.steps() > NUMBER_OF_STEPS)
-        {
-            ESP_LOGE(TAG, "Unable to convert relative to absolute since cmd.steps=%d", cmd.steps());
-        }
-        // make absolute
-        return Cmd(
-            cmd.mode(),
-            Ticks::normalize(tickz[handle_id] + (cmd.clockwise() ? cmd.steps() : -cmd.steps())),
-            cmd.speed());
+        add_(handle_id, cmd);
     }
 
     /***
      * NOTE: cmd is relative
      */
-    void add_(int handle_id, const Cmd &cmd, bool relative)
+    void add_(int handle_id, const Cmd &cmd)
     {
         // calculate time
         timers[handle_id] += cmd.time();
         last_idx_cmd_by_handle_id[handle_id] = cmds.size();
+
         cmds.push_back(HandleCmd(handle_id, cmd, cmds.size()));
 
         const auto ghosting = cmd.ghost();
@@ -365,14 +341,7 @@ public:
         {
             ESP_LOGE(TAG, "Mmmm I think you did something wrong... hanlde_id=%d has no known state!?", handle_id);
         }
-        else if (relative)
-        {
-            current = Ticks::normalize(current + (cmd.clockwise() ? cmd.steps() : -cmd.steps()));
-        }
-        else
-        {
-            current = cmd.steps();
-        }
+        current = Ticks::normalize(current + (cmd.clockwise() ? cmd.steps() : -cmd.steps()));
     };
 };
 

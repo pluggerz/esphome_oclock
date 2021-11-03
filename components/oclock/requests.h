@@ -46,7 +46,7 @@ namespace oclock
                             const auto speed = cmd.speed();
                             const auto clockwise = cmd.clockwise();
                             const auto swap_speed = cmd.swap_speed();
-                            const auto relativePosition = Instructions::send_relative;
+                            const auto relativePosition = true;
                             ESP_LOGI(TAG, "Cmd: %s=%3d sp=%d gh=%s cl=%s (%f) sw=%s", ghosting || relativePosition ? "steps" : "   to", steps, speed, YESNO(ghosting), ghosting ? "N/A" : YESNO(clockwise), cmd.time(), YESNO(swap_speed));
                         }
                         ESP_LOGI(TAG, "  done");
@@ -162,7 +162,7 @@ namespace oclock
                 instructions.dump();
                 // finalize
                 u16 millisLeft = 1; //(60 - t.seconds) * 1000 + (1000 - t.millis);
-                send(UartEndKeysMessage(instructions.send_relative, 
+                send(UartEndKeysMessage(true, 
                 instructions.turn_speed,
                 cmdSpeedUtil.get_speeds(), 
                 millisLeft));
