@@ -83,11 +83,11 @@ public:
         return handleId == -1;
     }
     int handleId;
-    Cmd cmd;
+    DeflatedCmdKey cmd;
     int orderId;
     inline uint8_t speed() const { return cmd.speed(); }
-    HandleCmd() : handleId(-1), cmd(Cmd()), orderId(-1) {}
-    HandleCmd(int handleId, Cmd cmd, int orderId) : handleId(handleId), cmd(cmd), orderId(orderId) {}
+    HandleCmd() : handleId(-1), cmd(DeflatedCmdKey()), orderId(-1) {}
+    HandleCmd(int handleId, DeflatedCmdKey cmd, int orderId) : handleId(handleId), cmd(cmd), orderId(orderId) {}
 };
 
 class Flags
@@ -193,11 +193,11 @@ public:
              timers[(S + 19) * 2 + 0], timers[(S + 19) * 2 + 1]);
 
         DRAW_ROW(0);
-        //DRAW_ROW2(0);
+        DRAW_ROW2(0);
         DRAW_ROW(2);
-        //DRAW_ROW2(2);
+        DRAW_ROW2(2);
         DRAW_ROW(4);
-        //DRAW_ROW2(4);
+        DRAW_ROW2(4);
 #undef DRAW_ROW
         //INFO("visibilityFlags: " << std::bitset<MAX_HANDLES>(visibilityFlags.raw()));
         //INFO("nonOverlappingFlags: " << std::bitset<MAX_HANDLES>(nonOverlappingFlags.raw()));
@@ -223,20 +223,48 @@ public:
 
 #include <map>
 
+class HandleBitMask {
+    uint64_t bits{0};
+};
+
 class Instructions : public HandlesState
 {
+    std::map<int, int> last_idx_cmd_by_handle_id;
 public:
     static const bool send_relative;
     std::vector<HandleCmd> cmds;
-    std::map<int, int> last_idx_cmd_by_handle_id;
-    bool swap_speed_detection = true;
-    const int turn_speed{8};
+    uint64_t speed_detection = {~uint64_t(0)};
+    int turn_speed{8};
+    int turn_speed_steps{5};
+
+    const uint64_t &get_speed_detection() const
+    {
+        return speed_detection;
+    }
+
+    void set_detect_speed_change(int animation_handle_id, bool value)
+    {
+        auto actual_handle_id = animationController.mapAnimatorHandle2PhysicalHandleId(animation_handle_id);
+        if (actual_handle_id < 0)   {
+            // ignore
+            ESP_LOGE(TAG, "Not mapped: animation_handle_id=%d", animation_handle_id);
+            return;
+        }
+        
+        // note: uint64_t is essential
+        uint64_t bit = uint64_t(1) << uint64_t(actual_handle_id);
+        if (value)
+            speed_detection |= bit;
+        else
+            speed_detection &= ~bit;
+        ESP_LOGE(TAG, "Mapped: animation_handle_id=%d -> actual_handle_id=%d and bit=%llu", animation_handle_id, actual_handle_id, speed_detection);
+        
+    }
 
     Instructions()
     {
-        for (int handleId = 0; handleId < MAX_HANDLES; handleId++)
+        for (auto handleId = 0; handleId < MAX_HANDLES; handleId++)
             tickz[handleId] = animationController.getCurrentTicksForAnimatorHandleId(handleId);
-        dump();
     }
 
     void rejectInstructions(int firstHandleId, int secondHandleId)
@@ -253,7 +281,7 @@ public:
         rejectInstructions(handleId, handleId);
     }
 
-    void addAll(const Cmd &cmd)
+    void addAll(const DeflatedCmdKey &cmd)
     {
         for (int handleId = 0; handleId < MAX_HANDLES; ++handleId)
         {
@@ -261,18 +289,17 @@ public:
         }
     }
 
-    void add(int handle_id, const Cmd &cmd)
+    void add(int handle_id, const DeflatedCmdKey &cmd)
     {
         if (cmd.steps() == 0 && cmd.relative())
         {
             // ignore, since we are talking about steps
             return;
         }
-
-        add_postprocess(handle_id, as_relative_cmd(handle_id, cmd));
+        add_(handle_id, as_relative_cmd(handle_id, cmd));
     }
 
-    inline Cmd as_relative_cmd(const int handle_id, const Cmd &cmd)
+    inline DeflatedCmdKey as_relative_cmd(const int handle_id, const DeflatedCmdKey &cmd)
     {
         const auto relativePosition = cmd.relative();
         if (relativePosition)
@@ -281,49 +308,16 @@ public:
         // make relative
         const auto from_tick = tickz[handle_id];
         const auto to_tick = cmd.steps();
-        return Cmd(
+        return DeflatedCmdKey(
             cmd.mode() - CmdEnum::ABSOLUTE,
             cmd.clockwise() ? Distance::clockwise(from_tick, to_tick) : Distance::antiClockwise(from_tick, to_tick),
             cmd.speed());
     }
 
-    void add_postprocess(int handle_id, const Cmd &cmd)
-    {
-        auto key = last_idx_cmd_by_handle_id.find(handle_id);
-        if (key == last_idx_cmd_by_handle_id.end())
-        {
-            add_(handle_id, cmd);
-            return;
-        }
-        Cmd &last_cmd = cmds[key->second].cmd;
-        auto last_direction = last_cmd.clockwise();
-        auto direction = cmd.clockwise();
-
-        if (last_direction == direction)
-        {
-            add_(handle_id, cmd);
-            return;
-        }
-        if (max(last_cmd.speed(), cmd.speed()) <= turn_speed)
-        {
-            // same direction or we are not that fast...
-            add_(handle_id, cmd);
-            return;
-        }
-
-        auto last_ghosting = last_cmd.ghost();
-        auto ghosting = cmd.ghost();
-        if (!last_ghosting && !ghosting && swap_speed_detection)
-        {
-            last_cmd.set_swap_bit();
-        }
-        add_(handle_id, cmd);
-    }
-
     /***
      * NOTE: cmd is relative
      */
-    void add_(int handle_id, const Cmd &cmd)
+    void add_(int handle_id, const DeflatedCmdKey &cmd)
     {
         // calculate time
         timers[handle_id] += cmd.time();

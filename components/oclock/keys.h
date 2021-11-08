@@ -35,17 +35,24 @@ union InflatedCmdKey
             clockwise : 1,
             absolute : 1,
             // next 3 bits for speed
-            speed : 3,
-            steps : 10;
+            steps : 10,
+            speed : 3;
         // which concludes: (1+1+1) + 3 + 10 = 16 bits
     } value;
     uint16_t raw;
     uint16_t mode_ : MODE_WIDTH;
+    // uint32_t base_ : MODE_WIDTH + STEPS_WIDTH;
 
     InflatedCmdKey()
     {
         raw = 0;
     }
+
+    void dump(const char* extra) const
+    {
+        ESP_LOGE(TAG, "%s: gh=%s cl=%s, ab=%s, steps=%d", extra, YESNO(ghost()), YESNO(clockwise()), YESNO(absolute()), steps());
+    }
+
 
     static const InflatedCmdKey &map(const uint16_t &raw)
     {
@@ -63,17 +70,12 @@ union InflatedCmdKey
         return value.absolute;
     }
 
-    inline bool swap_speed() const
-    {
-        return value.absolute;
-    }
-
     inline bool ghost() const
     {
         return value.ghost;
     }
 
-    inline int speed() const
+    inline int inflated_speed() const
     {
         return value.speed;
     }
@@ -81,6 +83,11 @@ union InflatedCmdKey
     inline int steps() const
     {
         return value.steps;
+    }
+
+    inline bool empty() const
+    {
+        return raw == 0;
     }
 };
 
@@ -129,26 +136,27 @@ public:
 //TODO: do static :S
 extern cmdSpeedUtil;
 
-union Cmd
+#ifdef MASTER_MODE
+union DeflatedCmdKey
 {
+private:
     // first 3 bits for mode
     struct FatKey
     {
         uint32_t ghost : 1,
             clockwise : 1,
             absolute : 1,
-            // next 3 bits for speed
-            speed : 3 + 16,
             // next 10 steps for steps
-            steps : 10;
+            steps : 10,
+            // next 3 and on bits for speed
+            speed : 3 + 16;
     };
 
-    uint32_t mode_ : 3;
+    uint32_t mode_ : MODE_WIDTH;
     FatKey fatKey;
-    uint32_t rawKey;
 
 public:
-#ifdef MASTER_MODE
+    uint32_t raw : 32;
 
     InflatedCmdKey asInflatedCmdKey() const
     {
@@ -158,10 +166,22 @@ public:
         ret.value.speed = cmdSpeedUtil.inflate_speed(fatKey.speed);
         return ret;
     }
-#endif
-    Cmd()
+
+    void dump(const char* extra) const
     {
-        rawKey = 0;
+        ESP_LOGE(TAG, "%s: gh=%s cl=%s, ab=%s, steps=%d, sp=%d raw=%d", extra, YESNO(ghost()), YESNO(clockwise()), YESNO(absolute()), steps(), speed(), (int)raw);
+    }
+
+    DeflatedCmdKey()
+    {
+        raw = 0;
+    }
+
+    DeflatedCmdKey(int _mode, u16 _steps, u8 _speed)
+    {
+        mode_ = (uint8_t)_mode;
+        fatKey.speed = _speed;
+        fatKey.steps = _steps;
     }
 
     inline void set_swap_bit()
@@ -209,30 +229,9 @@ public:
         return fatKey.steps;
     }
 
-    Cmd(const InflatedCmdKey &_raw)
-    {
-        fatKey.ghost = _raw.value.ghost;
-        fatKey.clockwise = _raw.value.clockwise;
-        fatKey.absolute = _raw.value.absolute;
-        fatKey.speed = cmdSpeedUtil.deflate_speed(_raw.value.speed);
-        fatKey.steps = _raw.value.steps;
-    }
-
-#ifdef MASTER_MODE
-    Cmd(int _mode, u16 _steps, u8 _speed)
-    {
-        mode_ = (uint8_t)_mode;
-        fatKey.speed = _speed;
-        fatKey.steps = _steps;
-    }
-
     double time() const
     {
         return static_cast<double>(fatKey.steps * 60) / static_cast<double>(abs(fatKey.speed)) / static_cast<double>(NUMBER_OF_STEPS);
     }
-#endif
-    bool isEmpty() const
-    {
-        return rawKey == 0;
-    }
 };
+#endif

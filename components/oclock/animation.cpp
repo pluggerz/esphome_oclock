@@ -36,7 +36,7 @@ void instructUsingStepCalculatorForHandle(Instructions &instructions, int speed,
         return;
     }
     auto clockwiseMode = steps > 0 ? CmdEnum::CLOCKWISE : CmdEnum::ANTI_CLOCKWISE;
-    instructions.add(handle_id, Cmd(clockwiseMode | CmdEnum::ABSOLUTE, to, speed));
+    instructions.add(handle_id, DeflatedCmdKey(clockwiseMode | CmdEnum::ABSOLUTE, to, speed));
 }
 
 void instructUsingStepCalculator(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &calculator)
@@ -109,22 +109,22 @@ void instructUsingSwipeWithBase(Instructions &instructions, int speed, const Han
         int steps = steps_calculator(from, base_tick);
         int ghost_steps = max_steps_from - abs(steps);
         ESP_LOGD(TAG, "instructUsingSwipeWithBase: handle_id=%d max_steps=%d steps=%d ghost_steps=%d", handle_id, max_steps, steps, ghost_steps);
-        instructions.add(handle_id, Cmd(CmdEnum::GHOST, ghost_steps, speed));
+        instructions.add(handle_id, DeflatedCmdKey(CmdEnum::GHOST, ghost_steps, speed));
 
         // go to base_tick
-        instructions.add(handle_id, Cmd((steps >= 0 ? CLOCKWISE : ANTI_CLOCKWISE) | CmdEnum::RELATIVE, abs(steps), speed));
+        instructions.add(handle_id, DeflatedCmdKey((steps >= 0 ? CLOCKWISE : ANTI_CLOCKWISE) | CmdEnum::RELATIVE, abs(steps), speed));
 
         // wait a sec
-        instructions.add(handle_id, Cmd(CLOCKWISE | CmdEnum::RELATIVE | CmdEnum::GHOST, 100 / speed, speed));
+        instructions.add(handle_id, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE | CmdEnum::GHOST, 100 / speed, speed));
 
         // go to final
         auto to = goal[handle_id];
         auto additional_steps = steps_calculator(base_tick, to);
-        instructions.add(handle_id, Cmd((additional_steps >= 0 ? CLOCKWISE : ANTI_CLOCKWISE) | CmdEnum::RELATIVE, abs(additional_steps), speed));
+        instructions.add(handle_id, DeflatedCmdKey((additional_steps >= 0 ? CLOCKWISE : ANTI_CLOCKWISE) | CmdEnum::RELATIVE, abs(additional_steps), speed));
 
         // wait
         ghost_steps = max_steps_to - abs(additional_steps);
-        instructions.add(handle_id, Cmd(CmdEnum::GHOST, ghost_steps, speed));
+        instructions.add(handle_id, DeflatedCmdKey(CmdEnum::GHOST, ghost_steps, speed));
     }
 }
 

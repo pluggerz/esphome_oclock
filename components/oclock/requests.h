@@ -17,7 +17,7 @@ namespace oclock
         class AnimationRequest : public oclock::BroadcastRequest
         {
         protected:
-            void sendCommandsForHandle(int animatorHandleId, const std::vector<Cmd> &commands)
+            void sendCommandsForHandle(int animatorHandleId, const std::vector<DeflatedCmdKey> &commands)
             {
                 auto physicalHandleId = animationController.mapAnimatorHandle2PhysicalHandleId(animatorHandleId);
                 if (physicalHandleId < 0 || commands.empty())
@@ -28,7 +28,7 @@ namespace oclock
                 UartKeysMessage msg(physicalHandleId, (u8)nmbrOfCommands);
                 for (std::size_t idx = 0; idx < nmbrOfCommands; ++idx)
                 {
-                    msg.setCmd(idx, commands[idx]);
+                    msg[idx] = commands[idx].asInflatedCmdKey().raw;
                 }
 
                 if (true)
@@ -36,18 +36,17 @@ namespace oclock
                     ESP_LOGI(TAG, "send(S%02d, A%d->PA%d size: %d",
                              animatorHandleId >> 1, animatorHandleId, physicalHandleId, commands.size());
 
-                    if (true)
+                    if (false)
                     {
                         for (std::size_t idx = 0; idx < nmbrOfCommands; ++idx)
                         {
-                            const auto &cmd = msg.getCmd(idx);
+                            const auto &cmd = InflatedCmdKey::map(msg[idx]);
                             const auto ghosting = cmd.ghost();
                             const auto steps = cmd.steps();
-                            const auto speed = cmd.speed();
+                            const auto speed = cmdSpeedUtil.deflate_speed(cmd.inflated_speed());
                             const auto clockwise = cmd.clockwise();
-                            const auto swap_speed = cmd.swap_speed();
                             const auto relativePosition = true;
-                            ESP_LOGI(TAG, "Cmd: %s=%3d sp=%d gh=%s cl=%s (%f) sw=%s", ghosting || relativePosition ? "steps" : "   to", steps, speed, YESNO(ghosting), ghosting ? "N/A" : YESNO(clockwise), cmd.time(), YESNO(swap_speed));
+                            ESP_LOGI(TAG, "Cmd: %s=%3d sp=%d gh=%s cl=%s", ghosting || relativePosition ? "steps" : "   to", steps, speed, YESNO(ghosting), ghosting ? "N/A" : YESNO(clockwise));
                         }
                         ESP_LOGI(TAG, "  done");
                     }
@@ -55,7 +54,7 @@ namespace oclock
                 send(msg);
             }
 
-            void sendAndClear(int handleId, std::vector<Cmd> &selected)
+            void sendAndClear(int handleId, std::vector<DeflatedCmdKey> &selected)
             {
                 if (selected.size() > 0)
                 {
@@ -68,7 +67,7 @@ namespace oclock
             {
                 std::sort(std::begin(cmds), std::end(cmds), [](const HandleCmd &a, const HandleCmd &b)
                           { return a.handleId == b.handleId ? a.orderId < b.orderId : a.handleId < b.handleId; });
-                std::vector<Cmd> selected;
+                std::vector<DeflatedCmdKey> selected;
                 int lastHandleId = -1;
                 int lastHandleMessages = 0;
                 for (auto it = std::begin(cmds); it != std::end(cmds); ++it)
@@ -164,7 +163,9 @@ namespace oclock
                 u16 millisLeft = 1; //(60 - t.seconds) * 1000 + (1000 - t.millis);
                 send(UartEndKeysMessage(
                     instructions.turn_speed,
+                    instructions.turn_speed_steps,
                     cmdSpeedUtil.get_speeds(),
+                    instructions.get_speed_detection(),
                     millisLeft));
             }
 
@@ -182,63 +183,122 @@ namespace oclock
             virtual void finalize() override final
             {
                 Instructions instructions;
+                // lower turn speed so we can actually spot it
+                instructions.turn_speed = 8;
+                instructions.turn_speed_steps = 5;
+                instructions.set_detect_speed_change(20 * 2 + 0, true);
+                instructions.set_detect_speed_change(20 * 2 + 1, true);
+
                 int speed = 32;
+                for (int handle_id = 0; handle_id < 1; ++handle_id)
+                {
+                    for (int idx = 0; idx < 20; ++idx)
+                    {
+                        instructions.add(20 * 2 + handle_id, DeflatedCmdKey(ANTI_CLOCKWISE | RELATIVE, 90, speed));
+                        instructions.add(22 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed));
+                        instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed));
+                        instructions.add(22 * 2 + handle_id, DeflatedCmdKey(ANTI_CLOCKWISE | RELATIVE, 90, speed));
+                        //instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 60, speed));
+                        //instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 60, speed));
+                        //instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 60, speed));
+                    }
+                    instructions.add(20 * 2 + handle_id, DeflatedCmdKey(ANTI_CLOCKWISE | RELATIVE, 360, speed));
+                    instructions.add(22 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 360, speed));
+                }
+                sendInstructions(instructions);
+            }
+        };
+
+        class SpeedAdaptTestRequest2 final : public AnimationRequest
+        {
+        public:
+            virtual void finalize() override final
+            {
+                Instructions instructions;
+                instructions.set_detect_speed_change(20 * 2 + 0, true);
+                instructions.set_detect_speed_change(20 * 2 + 1, false);
+                instructions.set_detect_speed_change(2 * 2 + 0, true);
+                instructions.set_detect_speed_change(2 * 2 + 1, true);
+
+                int speed = 8;
                 for (int idx = 0; idx < 4; ++idx)
                 {
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 90, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 90, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 90, speed));
+
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed / 2));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed / 2));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed / 2));
+
+                    /*
                     instructions.swap_speed_detection = true;
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(GHOST | CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(GHOST | ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    
 
                     instructions.swap_speed_detection = false;
-                    instructions.add(20 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
-                    instructions.add(20 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
-                    // instructions.add(20 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
+                    */
+                    // instructions.add(20 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
 
                     //instructions.swap_speed_detection = false;
-                    //instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
-                    //instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
+                    //instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
+                    //instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
 
-                    //instructions.add(22 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
+                    //instructions.add(22 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
                 }
 
                 sendInstructions(instructions);
 
                 return;
-                // instructions.add(22 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                // instructions.add(22 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
                 for (int idx = 0; idx < 2; ++idx)
                 {
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
-                    instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
-                    instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
-                    instructions.add(22 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
                 }
 
                 for (int idx = 0; idx < 2; ++idx)
                 {
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
-                    instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
-                    instructions.add(20 * 2 + 0, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 4));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 16));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 8));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
+                    instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 90, 32));
                 }
                 sendInstructions(instructions);
             };
@@ -251,16 +311,16 @@ namespace oclock
             {
 
                 Instructions instructions;
-                instructions.add(22 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 4));
+                instructions.add(22 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 4));
 
-                instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
-                instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
 
-                instructions.add(20 * 2, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
-                instructions.add(20 * 2, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(20 * 2, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(20 * 2, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
 
                 for (int idx = 0; idx < 8; ++idx)
-                    instructions.add(20 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 32));
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 32));
 
                 sendInstructions(instructions);
             };
@@ -272,17 +332,17 @@ namespace oclock
             virtual void finalize() override final
             {
                 Instructions instructions;
-                instructions.add(20 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 4));
+                instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 4));
 
-                instructions.add(20 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
-                instructions.add(20 * 2 + 1, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
 
-                instructions.add(22 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
-                instructions.add(22 * 2 + 1, Cmd(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(22 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
+                instructions.add(22 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 8));
 
                 for (int idx = 0; idx < 16; ++idx)
                 {
-                    instructions.add(22 * 2 + 0, Cmd(CLOCKWISE | CmdEnum::RELATIVE, 720, 64));
+                    instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 720, 64));
                 }
                 sendInstructions(instructions);
             };
@@ -332,13 +392,13 @@ namespace oclock
                 switch (random(2))
                 {
                 case 0:
-                    instructUsingStepCalculator(instructions, 15, goal, *calculator);
+                    instructUsingStepCalculator(instructions, 32, goal, *calculator);
                     ESP_LOGI(TAG, "Using instructUsingStepCalculator");
                     break;
 
                 case 1:
                 default:
-                    instructUsingSwipe(instructions, 15, goal, *calculator);
+                    instructUsingSwipe(instructions, 32, goal, *calculator);
                     ESP_LOGI(TAG, "Using instructUsingSwipe");
                     break;
                 }

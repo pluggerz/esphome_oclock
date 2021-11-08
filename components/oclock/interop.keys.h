@@ -24,20 +24,9 @@ public:
         return _size;
     }
 
-    const uint16_t& operator[](int idx) const
+    uint16_t &operator[](int idx)
     {
         return cmds[idx];
-    }
-
-#ifdef MASTER_MODE
-    void setCmd(int idx, const Cmd &cmd)
-    {
-        cmds[idx] = cmd.asInflatedCmdKey().raw;
-    }
-#endif
-    Cmd getCmd(int idx) const
-    {
-        return Cmd(InflatedCmdKey::map(cmds[idx]));
     }
 } __attribute__((packed, aligned(1)));
 
@@ -52,15 +41,20 @@ public:
 struct UartEndKeysMessage : public UartMessage
 {
 public:
-    u16 numberOfMillisLeft;
-    uint8_t turn_speed;
+    uint16_t numberOfMillisLeft;
+    uint8_t turn_speed, turn_speed_steps;
     uint8_t speed_map[8];
+    uint64_t speed_detection;
 
-    UartEndKeysMessage(const uint8_t turn_speed,  const uint8_t (&speed_map)[8], u16 numberOfMillisLeft)
+    UartEndKeysMessage(const uint8_t turn_speed, const uint8_t turn_speed_steps, const uint8_t (&speed_map)[8], uint64_t _speed_detection, uint16_t numberOfMillisLeft)
         : UartMessage(-1, MSG_END_KEYS, ALL_SLAVES),
           numberOfMillisLeft(numberOfMillisLeft),
-          turn_speed(turn_speed)
+          turn_speed(turn_speed),
+          turn_speed_steps(turn_speed_steps),
+          speed_detection(_speed_detection)
     {
+        ESP_LOGE(TAG, "SPD: %llu", speed_detection);
+
         for (int idx = 0; idx < 8; ++idx)
         {
             this->speed_map[idx] = speed_map[idx];

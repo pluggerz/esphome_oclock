@@ -373,7 +373,7 @@ auto uartMainListener = [](const UartMessage *msg)
         return true;
 
     case MsgType::MSG_END_KEYS:
-        StepExecutors::process_end_keys(reinterpret_cast<const UartEndKeysMessage *>(msg));
+        StepExecutors::process_end_keys(slaveId, reinterpret_cast<const UartEndKeysMessage *>(msg));
         return true;
 
     case MSG_POS_REQUEST:

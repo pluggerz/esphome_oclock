@@ -40,11 +40,11 @@ class PreMainMode final
 private:
     // our administration
     Hit hit;
-    static const uint8_t searchSpeed = 20;
+    static const uint8_t searchSpeed = 16;
     int16_t stepOutSteps = 0;
     S &stepper;
     int16_t initial_ticks_;
-    
+
 public:
     bool busy() const
     {
@@ -74,6 +74,8 @@ public:
         hit.ThirdTime = false;
 
         // always from the same side, to make sure we stop the same way
+        stepper.speed_up = false;
+        stepper.setGhosting(false);
         stepper.set_speed_in_revs_per_minute(+searchSpeed);
         stepper.sync();
     }
@@ -107,6 +109,7 @@ public:
             completed.FirstHits++;
             hit.FirstTime = true;
             stepper.set_speed_in_revs_per_minute(-searchSpeed / 3);
+            stepper.sync();
         }
         else if (stepOutSteps > 0)
         {
@@ -121,6 +124,7 @@ public:
             if (stepOutSteps == 0)
             {
                 stepper.set_speed_in_revs_per_minute(+searchSpeed / 1);
+                stepper.sync();
             }
         }
         else if (hit.SecondTime == false)
@@ -130,6 +134,7 @@ public:
                 hit.SecondTime = true;
                 completed.SecondHits++;
                 stepper.set_speed_in_revs_per_minute(-searchSpeed / 1);
+                stepper.sync();
             }
         }
         else if (hit.ThirdTime == false)
@@ -139,6 +144,7 @@ public:
                 hit.ThirdTime = true;
                 stepper.sync();
                 completed.ThirdHits++;
+                stepper.sync();
             }
             else
             {

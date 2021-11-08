@@ -12,9 +12,14 @@ public:
         idx = 0;
     }
 
-    Cmd operator[](int idx) const
+    const InflatedCmdKey &operator[](int idx) const
     {
-        return Cmd(cmds[idx]);
+        return cmds[idx];
+    }
+
+    InflatedCmdKey &operator[](int idx)
+    {
+        return cmds[idx];
     }
 
     int size() const
@@ -35,7 +40,7 @@ public:
     }
 };
 
-const uint16_t reverse_steps = 3;
+ uint16_t reverse_steps = 5;
 
 template <class S>
 class Animator final
@@ -48,6 +53,9 @@ public:
     uint8_t idx = 0;
     uint8_t turning = 0;
     uint16_t steps = 0;
+    bool speed_detection = false;
+    bool speed_up = false;
+    bool speed_down = false;
 
     void followSeconds(Micros now, bool discrete)
     {
@@ -65,6 +73,65 @@ public:
             stepperPtr->tryToStep(now);
     }
 
+    inline bool fast_enough(int speed) __attribute__((always_inline))
+    {
+        return speed > stepperPtr->turn_speed_in_revs_per_minute;
+    }
+
+    inline bool do_speed_up() __attribute__((always_inline))
+    {
+        if (!speed_detection)
+            // ignore
+            return false;
+
+        const auto &keys = *keysPtr;
+        const auto &cur = keys[idx];
+        const auto cur_speed = cmdSpeedUtil.deflate_speed(cur.inflated_speed());
+
+        if (cur.ghost())
+            // the stepper is 'not stepping'
+            return false;
+        if (idx == 0)
+            // first command
+            return fast_enough(cur_speed);
+        const auto &prev = keys[idx - 1];
+        if (prev.ghost())
+            // threat as first command
+            return fast_enough(cur_speed);
+        if (prev.clockwise() == cur.clockwise())
+            // same direction, the stepper will deal with it
+            return false;
+        // lets check if we need to 'start'
+        return fast_enough(cur_speed);
+    }
+
+    inline bool do_speed_down() __attribute__((always_inline))
+    {
+        if (!speed_detection)
+            return false;
+        const auto &keys = *keysPtr;
+        const auto &cur = keys[idx];
+        const auto cur_speed = cmdSpeedUtil.deflate_speed(cur.inflated_speed());
+        if (cur.ghost())
+            // the stepper is 'not stepping'
+            return false;
+
+        if (idx + 1 >= MAX_ANIMATION_KEYS)
+        {
+            // last command, so lets check if we need to slow down
+            return fast_enough(cur_speed);
+        }
+        const auto &nxt = keys[idx + 1];
+        if (nxt.empty() || nxt.ghost())
+            // last command, or next is still... lets check if we need to step down...
+            return fast_enough(cur_speed);
+        if (cur.clockwise() == nxt.clockwise())
+            // same direction, the stepper will deal with it
+            return false;
+        // lets check if we need to 'stop'
+        return fast_enough(cur_speed);
+    }
+
     void loop(Micros now)
     {
         if (keysPtr == nullptr || stepperPtr == nullptr)
@@ -72,8 +139,8 @@ public:
             return;
         }
 
-        AnimationKeys keys = *keysPtr;
-        S &stepper = *stepperPtr;
+        auto &keys = *keysPtr;
+        auto &stepper = *stepperPtr;
         if (steps > 0)
         {
             switch (steps)
@@ -95,79 +162,78 @@ public:
             return;
         }
 
+        stepper.disable_defecting();
         if (idx == keys.size())
         {
             // nothing to do
             keysPtr = nullptr;
-            ESP_LOGI(TAG, "E done");
             return;
         }
-
-        const auto cmd = keys[idx];
-        if (cmd.isEmpty())
+        const InflatedCmdKey &cmd = keys[idx];
+        if (cmd.empty())
         {
             return;
         }
+        const auto speed = cmdSpeedUtil.deflate_speed(cmd.inflated_speed());
         const auto clockwise = cmd.clockwise();
-        const auto swap_speed = cmd.swap_speed();
-        int eat_steps = 0;
         if (turning == 0)
         {
-            stepper.set_defecting(false);
-
-            auto was_swap_speed = idx > 0 && (keys[idx - 1].swap_speed());
-            if (was_swap_speed)
-            {
-                // speed up
-                auto steps_now = cmd.steps();
-                auto steps_previous = keys[idx - 1].steps();
-                eat_steps += min(reverse_steps, min(steps_now, steps_previous));
-            }
-
-            if (swap_speed)
-            {
-                turning = 2;
-
-                // slow down
-                auto steps_now = cmd.steps();
-                auto steps_next = keys[idx + 1].steps();
-                eat_steps += min(reverse_steps, min(steps_now, steps_next));
-            }
+            speed_up = do_speed_up();
+            speed_down = do_speed_down();
+#define STEPS keys[idx].value.steps
+            if (speed_up && STEPS >= reverse_steps)
+                STEPS -= reverse_steps;
             else
+                speed_up = false;
+            if (speed_down && STEPS >= reverse_steps)
+                STEPS -= reverse_steps;
+            else
+                speed_down = false;
+#undef STEPS
+            turning = 3;
+        }
+        if (turning == 3)
+        {
+            turning--;
+            if (speed_up)
             {
-                idx++;
+                stepper.setGhosting(false);
+                stepper.enable_defecting(speed);
+                steps = reverse_steps * STEP_MULTIPLIER;
+                stepper.set_speed_in_revs_per_minute(clockwise ? speed : -speed, true);
             }
+            return;
         }
-        else if (turning == 2)
+        if (turning == 2)
         {
-            stepper.set_defecting(true);
-            ESP_LOGD(TAG, "Sp down");
-            --turning;
-
-            steps = reverse_steps * STEP_MULTIPLIER;
-            auto speed = stepper.turn_speed_in_revs_per_minute;
+            turning--;
+            // just execute
+            const auto ghosting = cmd.ghost();
+            stepper.setGhosting(ghosting);
+            steps = cmd.steps() * STEP_MULTIPLIER;
+            if (ghosting)
+            {
+                // we are standing 'still' so presume more speed
+                stepper.set_current_speed_in_revs_per_minute(clockwise ? speed : -speed);
+            }
             stepper.set_speed_in_revs_per_minute(clockwise ? speed : -speed);
-
-            ++idx;
             return;
         }
-        else if (turning == 1)
+        if (turning == 1)
         {
-            ESP_LOGD(TAG, "Sp up %d", (int)cmd.speed());
-            --turning;
-            steps = reverse_steps * STEP_MULTIPLIER;
-            stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed() : -cmd.speed());
-            return;
+            turning--;
+
+            // execute
+            if (speed_down)
+            {
+                stepper.setGhosting(false);
+                stepper.enable_defecting(speed);
+                steps = reverse_steps * STEP_MULTIPLIER;
+                auto turn_speed = stepper.turn_speed_in_revs_per_minute;
+                stepper.set_speed_in_revs_per_minute(clockwise ? turn_speed : -turn_speed);
+            }
+            idx++;
         }
-        const auto ghosting = cmd.ghost();
-        stepper.setGhosting(ghosting);
-        auto current = stepper.ticks();
-
-        steps = (cmd.steps() - eat_steps) * STEP_MULTIPLIER;
-        //TODO: should correct timings for 'eat_steps'
-        ESP_LOGD(TAG, "E gh=%d s=%d cw=%d s=%d", (int)ghosting, (int)steps, (int)clockwise, (int)cmd.speed());
-
-        stepper.set_speed_in_revs_per_minute(clockwise ? cmd.speed() : -cmd.speed());
     }
 
 public:
@@ -176,15 +242,18 @@ public:
         keysPtr = nullptr;
     }
 
-    void start(AnimationKeys *keys, u16 millisLeft)
+    void start(AnimationKeys *keys, u16 millisLeft, bool speed_detection)
     {
         this->keysPtr = keys;
-        ESP_LOGI(TAG, "K: %d", keys->size());
         this->t0 = millis();
         this->millisLeft = millisLeft;
         this->idx = 0;
         this->steps = 0;
         this->turning = 0;
+        this->speed_down = 0;
+        this->speed_up = false;
+
+        this->speed_detection = speed_detection;
         stepperPtr->sync();
     }
 };
@@ -218,15 +287,23 @@ void StepExecutors::process_begin_keys(const UartMessage *msg)
     animationKeysArray[1].clear();
 }
 
-void StepExecutors::process_end_keys(const UartEndKeysMessage *msg)
+void StepExecutors::process_end_keys(int slave_id, const UartEndKeysMessage *msg)
 {
+    cmdSpeedUtil.set_speeds(msg->speed_map);
+
+    stepper0.speed_up = true;
+    stepper1.speed_up = true;
+
+    reverse_steps = msg->turn_speed_steps;
+
     stepper0.turn_speed_in_revs_per_minute = msg->turn_speed;
     stepper1.turn_speed_in_revs_per_minute = msg->turn_speed;
 
-    cmdSpeedUtil.set_speeds(msg->speed_map);
+    bool speed_detection0 = msg->speed_detection & (1 << uint64_t(slave_id + 0));
+    bool speed_detection1 = msg->speed_detection & (1 << uint64_t(slave_id + 1));
 
-    animator0.start(&animationKeysArray[0], 1);
-    animator1.start(&animationKeysArray[1], 1);
+    animator0.start(&animationKeysArray[0], 1, speed_detection0);
+    animator1.start(&animationKeysArray[1], 1, speed_detection1);
 }
 
 void StepExecutors::process_add_keys(const UartKeysMessage *msg)

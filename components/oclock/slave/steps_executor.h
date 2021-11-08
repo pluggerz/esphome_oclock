@@ -13,7 +13,7 @@ public:
     //
     static void process_begin_keys(const UartMessage *msg);
     static void process_add_keys(const UartKeysMessage *msg);
-    static void process_end_keys(const UartEndKeysMessage *msg);
+    static void process_end_keys(int slave_id, const UartEndKeysMessage *msg);
 
     // will execute the steps
     static void loop(Micros now);
