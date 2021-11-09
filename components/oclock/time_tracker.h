@@ -42,12 +42,15 @@ protected:
     const __FlashStringHelper *name_;
 
 public:
-    TimeTracker(const __FlashStringHelper *name) : name_(name) {
-      
+    TimeTracker(const __FlashStringHelper *name) : name_(name)
+    {
     }
     virtual Time now() const = 0;
 
-    const __FlashStringHelper* name() const {
+    virtual int get_speed_multiplier() const = 0;
+
+    const __FlashStringHelper *name() const
+    {
         return name_;
     }
 
@@ -62,11 +65,15 @@ class oclock::time_tracker::InternalClockTimeTracker final : public oclock::time
 {
     uint64_t currentEpocInSeconds{0};
     uint64_t lastUpdateInMillis{0};
-    uint8_t multiplier{6};
+    const uint8_t multiplier{2};
 
 public:
     InternalClockTimeTracker() : TimeTracker(F("InternalClockTimeTracker")) {}
 
+    virtual int get_speed_multiplier() const
+    {
+        return multiplier;
+    }
 
     virtual void dump_config(const char *tag) const override
     {
@@ -93,11 +100,15 @@ class oclock::time_tracker::TestTimeTracker final : public oclock::time_tracker:
     Time time_;
 
 public:
+    virtual int get_speed_multiplier() const
+    {
+        return 1;
+    }
     TestTimeTracker() : TimeTracker(F("TestTimeTracker")) {}
 
     void set_hour(int value) { time_.hour = value; }
     void set_minute(int value) { time_.minute = value; }
-    
+
     void set(const Time &time) { time_ = time; }
     Time get() const { return time_; }
 
@@ -110,6 +121,10 @@ public:
 class oclock::time_tracker::RealTimeTracker final : public oclock::time_tracker::TimeTracker
 {
     esphome::time::RealTimeClock *time_ = nullptr;
+    virtual int get_speed_multiplier() const
+    {
+        return 1;
+    }
 
 public:
     RealTimeTracker() : TimeTracker(F("RealTimeTracker")) {}

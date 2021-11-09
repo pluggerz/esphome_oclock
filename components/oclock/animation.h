@@ -141,6 +141,8 @@ protected:
 public:
     Flags visibilityFlags, nonOverlappingFlags;
 
+    double time_at(int handle_id) const { return timers[handle_id]; }
+
     inline bool valid_handle(int handleId) const
     {
         return tickz[handleId] >= 0l;
@@ -211,10 +213,15 @@ public:
         nonOverlappingFlags.copyFrom(src.nonOverlappingFlags);
     }
 
+    void set_ticks(int handle_id, int ticks)
+    {
+        tickz[handle_id] = Ticks::normalize(ticks);
+    }
+    /*
     int16_t &operator[](int handleId)
     {
         return tickz[handleId];
-    }
+    }*/
     const int16_t &operator[](int handleId) const
     {
         return tickz[handleId];
@@ -223,19 +230,31 @@ public:
 
 #include <map>
 
-class HandleBitMask {
+class HandleBitMask
+{
     uint64_t bits{0};
 };
 
 class Instructions : public HandlesState
 {
-    std::map<int, int> last_idx_cmd_by_handle_id;
 public:
     static const bool send_relative;
     std::vector<HandleCmd> cmds;
-    uint64_t speed_detection = {~uint64_t(0)};
+    uint64_t speed_detection{~uint64_t(0)};
     int turn_speed{8};
     int turn_speed_steps{5};
+
+    void iterate_handle_ids(std::function<void(int handle_id)> func)
+    {
+        for (int handle_id = 0; handle_id < MAX_HANDLES; ++handle_id)
+        {
+            if (!valid_handle(handle_id))
+            {
+                continue;
+            }
+            func(handle_id);
+        };
+    }
 
     const uint64_t &get_speed_detection() const
     {
@@ -245,12 +264,13 @@ public:
     void set_detect_speed_change(int animation_handle_id, bool value)
     {
         auto actual_handle_id = animationController.mapAnimatorHandle2PhysicalHandleId(animation_handle_id);
-        if (actual_handle_id < 0)   {
+        if (actual_handle_id < 0)
+        {
             // ignore
             ESP_LOGE(TAG, "Not mapped: animation_handle_id=%d", animation_handle_id);
             return;
         }
-        
+
         // note: uint64_t is essential
         uint64_t bit = uint64_t(1) << uint64_t(actual_handle_id);
         if (value)
@@ -258,7 +278,6 @@ public:
         else
             speed_detection &= ~bit;
         ESP_LOGE(TAG, "Mapped: animation_handle_id=%d -> actual_handle_id=%d and bit=%llu", animation_handle_id, actual_handle_id, speed_detection);
-        
     }
 
     Instructions()
@@ -321,8 +340,6 @@ public:
     {
         // calculate time
         timers[handle_id] += cmd.time();
-        last_idx_cmd_by_handle_id[handle_id] = cmds.size();
-
         cmds.push_back(HandleCmd(handle_id, cmd, cmds.size()));
 
         const auto ghosting = cmd.ghost();
@@ -346,3 +363,13 @@ extern StepCalculator antiClockwiseCalculator;
 
 void instructUsingSwipe(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator);
 void instructUsingStepCalculator(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator);
+
+class InBetweenAnimations
+{
+public:
+    static void instructStarAnimation(Instructions &instructions, int speed);
+    static void instructDashAnimation(Instructions &instructions, int speed);
+    static void instructMiddlePointAnimation(Instructions &instructions, int speed);
+    static void instructAllInnerPointAnimation(Instructions &instructions, int speed);
+    static void instructPacManAnimation(Instructions &instructions, int speed);
+};

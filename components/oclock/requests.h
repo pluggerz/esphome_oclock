@@ -103,7 +103,7 @@ namespace oclock
                 auto lambda = [&state](int handleId, int hours)
                 {
                     int goal = static_cast<int>(NUMBER_OF_STEPS * static_cast<double>(hours == 13 ? 7.5 : (double)hours) / 12.0);
-                    state[handleId] = goal;
+                    state.set_ticks(handleId, goal);
                     // if (hours == 13)
                     //    state.visibilityFlags.hide(handleId);
                 };
@@ -372,7 +372,7 @@ namespace oclock
                 Instructions instructions;
 
                 StepCalculator *calculator;
-
+                auto speed=tracker.get_speed_multiplier() * 12;
                 switch (random(3))
                 {
                 case 0:
@@ -389,17 +389,47 @@ namespace oclock
                     ESP_LOGI(TAG, "Using antiClockwiseCalculator");
                     break;
                 }
-                switch (random(2))
+                switch (random(7))
                 {
                 case 0:
-                    instructUsingStepCalculator(instructions, 32, goal, *calculator);
+                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
                     ESP_LOGI(TAG, "Using instructUsingStepCalculator");
                     break;
 
                 case 1:
-                default:
-                    instructUsingSwipe(instructions, 32, goal, *calculator);
+                    instructUsingSwipe(instructions, speed, goal, *calculator);
                     ESP_LOGI(TAG, "Using instructUsingSwipe");
+                    break;
+
+                case 2:
+                    InBetweenAnimations::instructPacManAnimation(instructions, speed);
+                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
+                    ESP_LOGI(TAG, "Using instructPacManAnimation");
+                    break;
+
+                case 3:
+                    InBetweenAnimations::instructAllInnerPointAnimation(instructions, speed);
+                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
+                    ESP_LOGI(TAG, "Using instructAllInnerPointAnimation");
+                    break;
+
+                case 4:
+                    InBetweenAnimations::instructMiddlePointAnimation(instructions, speed);
+                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
+                    ESP_LOGI(TAG, "Using instructMiddlePointAnimation");
+                    break;
+
+                case 5:
+                    InBetweenAnimations::instructDashAnimation(instructions, speed);
+                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
+                    ESP_LOGI(TAG, "Using instructDashAnimation");
+                    break;
+
+                case 6:
+                default:
+                    InBetweenAnimations::instructStarAnimation(instructions, speed);
+                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
+                    ESP_LOGI(TAG, "Using instructStarAnimation");
                     break;
                 }
                 sendInstructions(instructions);

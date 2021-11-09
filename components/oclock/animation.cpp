@@ -4,9 +4,9 @@
 
 using namespace esphome;
 
-
 #include "animation.h"
 #include "ticks.h"
+#include <cmath>
 
 typedef std::function<int(int from, int to)> StepCalculator;
 
@@ -126,6 +126,265 @@ void instructUsingSwipeWithBase(Instructions &instructions, int speed, const Han
         ghost_steps = max_steps_to - abs(additional_steps);
         instructions.add(handle_id, DeflatedCmdKey(CmdEnum::GHOST, ghost_steps, speed));
     }
+}
+
+class ClockIdUtil
+{
+public:
+    /***
+     *        column: 
+     *           0  1    2   3     4   5   6   7 
+     * row  0 :  0  1    6   7    12  13  18  19  
+     *      1 :  2  3    8   9    14  15  20  21
+     *      2 :  4  5   10  11    16  17  22  23
+     */
+
+    static int to_row_id(int clock_id)
+    {
+        return (clock_id % 6) >> 1;
+    }
+
+    static int to_column_id(int clock_id)
+    {
+#define CASE(CLOCK_ID, COLUMN) \
+    case CLOCK_ID:             \
+        return COLUMN;
+        switch (clock_id)
+        {
+#define INNER_CASES(D) \
+    CASE(D + 0, 0);    \
+    CASE(D + 1, 1);    \
+    CASE(D + 6, 2);    \
+    CASE(D + 7, 3);    \
+    CASE(D + 12, 4);   \
+    CASE(D + 13, 5);   \
+    CASE(D + 18, 6);   \
+    CASE(D + 19, 7);
+            INNER_CASES(0);
+            INNER_CASES(2);
+            INNER_CASES(4);
+#undef INNER_CASES
+#undef CASE
+        default:
+            ESP_LOGE(TAG, "Unable to map: clock_id=%d !?", clock_id);
+            return 0;
+        }
+    }
+};
+
+class HandleIdUtil
+{
+public:
+    static int to_clock_id(int handle_id)
+    {
+        return handle_id >> 1;
+    };
+    static int to_row_id(int handle_id)
+    {
+        return ClockIdUtil::to_row_id(to_clock_id(handle_id));
+    }
+    static int to_column_id(int handle_id)
+    {
+        return ClockIdUtil::to_column_id(to_clock_id(handle_id));
+    }
+};
+
+int steps_needed_for_given_time_and_speed(double time, int speed)
+{
+    return time * double(speed * NUMBER_OF_STEPS) / 60.0d;
+};
+
+void instructDelayUntilAllAreReady(Instructions &instructions, int speed, double additional_time = 0)
+{
+    double max_time = -1;
+    for (int handle_id = 0; handle_id < MAX_HANDLES; ++handle_id)
+    {
+        if (!instructions.valid_handle(handle_id))
+        {
+            continue;
+        }
+        auto time = instructions.time_at(handle_id);
+        max_time = max_time < 0 ? time : max(time, max_time);
+    }
+    if (max_time < 0)
+        // no valid handles?
+        return;
+    max_time += additional_time;
+    for (int handle_id = 0; handle_id < MAX_HANDLES; ++handle_id)
+    {
+        if (!instructions.valid_handle(handle_id))
+        {
+            continue;
+        }
+        auto time = max_time - instructions.time_at(handle_id);
+        auto steps = steps_needed_for_given_time_and_speed(time, speed);
+        if (steps > 0)
+            instructions.add(handle_id, DeflatedCmdKey(GHOST | RELATIVE, steps, speed));
+    }
+}
+
+void InBetweenAnimations::instructStarAnimation(Instructions &instructions, int speed)
+{
+    int start_array[4] = {270,
+                          450,
+                          630,
+                          90};
+    // firs all go to our goal
+    HandlesState start;
+    for (int handle_id = 0; handle_id < MAX_HANDLES; ++handle_id)
+    {
+        if (!instructions.valid_handle(handle_id))
+        {
+            continue;
+        }
+
+        auto row_id = HandleIdUtil::to_row_id(handle_id) % 2;
+        auto column_id = HandleIdUtil::to_column_id(handle_id) % 2;
+        auto case_id = 2 * row_id + row_id;
+        start.set_ticks(handle_id, start_array[case_id]);
+    };
+    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
+    for (int handle_id = 0; handle_id < MAX_HANDLES; ++handle_id)
+    {
+        if (!instructions.valid_handle(handle_id))
+        {
+            continue;
+        }
+        bool clockwise = handle_id % 2;
+        auto steps = NUMBER_OF_STEPS - NUMBER_OF_STEPS;
+        instructions.add(handle_id, DeflatedCmdKey(RELATIVE | (clockwise ? CLOCKWISE : ANTI_CLOCKWISE), steps, speed));
+        instructions.add(handle_id, DeflatedCmdKey(RELATIVE | (!clockwise ? CLOCKWISE : ANTI_CLOCKWISE), steps / 2, speed));
+    }
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
+}
+
+void InBetweenAnimations::instructPacManAnimation(Instructions &instructions, int speed)
+{
+    HandlesState start;
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        {
+            switch (HandleIdUtil::to_row_id(handle_id))
+            {
+            case 0:
+                start.set_ticks(handle_id, 0);
+                break;
+            case 1:
+                start.set_ticks(handle_id, handle_id % 2 ? 0 : NUMBER_OF_STEPS / 2);
+                break;
+            case 2:
+                start.set_ticks(handle_id, NUMBER_OF_STEPS / 2);
+                break;
+            }
+        });
+    // lets go there
+    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    // some delay
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
+    const int randomness[2] = {NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 2), NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 4)};
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        {
+            auto forward = handle_id % 2 ? CLOCKWISE : ANTI_CLOCKWISE;
+            auto reverse = handle_id % 2 ? ANTI_CLOCKWISE : CLOCKWISE;
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | forward, NUMBER_OF_STEPS, speed));
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | reverse, NUMBER_OF_STEPS / 2 + randomness[0], speed));
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | forward, NUMBER_OF_STEPS / 2 + randomness[1], speed));
+        });
+}
+
+auto origin_function = [](int handle_id)
+{
+    auto y = double(HandleIdUtil::to_row_id(handle_id)) - 1.0d;
+    auto x = double(HandleIdUtil::to_column_id(handle_id)) - 3.5d;
+    auto principal = atan2(y, x);
+    return double(NUMBER_OF_STEPS / 4) + principal * double(NUMBER_OF_STEPS) / 2.0d / 3.14159265359d;
+};
+
+void InBetweenAnimations::instructAllInnerPointAnimation(Instructions &instructions, int speed)
+{
+    HandlesState start;
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        { start.set_ticks(handle_id, origin_function(handle_id) + NUMBER_OF_STEPS / 2); });
+    // lets go there
+    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    // some delay
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
+    const int randomness[2] = {NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 2), NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 4)};
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        {
+            auto steps = NUMBER_OF_STEPS;
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | CLOCKWISE, steps, speed));
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | ANTI_CLOCKWISE, randomness[0], speed));
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | CLOCKWISE, randomness[1], speed));
+        });
+}
+
+void InBetweenAnimations::instructMiddlePointAnimation(Instructions &instructions, int speed)
+{
+    HandlesState start;
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        { start.set_ticks(handle_id, origin_function(handle_id)); });
+    // lets go there
+    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    // some delay
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        {
+            auto clockwise = handle_id % 2;
+            auto steps = NUMBER_OF_STEPS;
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | (clockwise ? CLOCKWISE : ANTI_CLOCKWISE), steps, speed));
+            instructions.add(handle_id, DeflatedCmdKey(RELATIVE | (!clockwise ? CLOCKWISE : ANTI_CLOCKWISE), steps, speed));
+        });
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
+};
+
+void InBetweenAnimations::instructDashAnimation(Instructions &instructions, int speed)
+{
+    auto case_func = [](int handle_id)
+    {
+        auto row_id = HandleIdUtil::to_row_id(handle_id);
+        switch (row_id)
+        {
+        case 0:
+            return 0;
+
+        case 2:
+            return 1;
+
+        default:
+            return handle_id % 2;
+        }
+    };
+
+    // lets determine the initial position
+    HandlesState start;
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        { start.set_ticks(handle_id, case_func(handle_id) == 0 ? NUMBER_OF_STEPS / 2 : 0); });
+    // lets go there
+    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    // some delay
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
+    // our animation
+    const int randomness[3] = {random(NUMBER_OF_STEPS / 4), random(NUMBER_OF_STEPS / 4), random(NUMBER_OF_STEPS / 4)};
+    instructions.iterate_handle_ids(
+        [&](int handle_id)
+        {
+            for (auto idx = 0; idx < 3; ++idx)
+            {
+                auto steps = NUMBER_OF_STEPS / 4 + randomness[idx];
+                instructions.add(handle_id, DeflatedCmdKey(RELATIVE | CLOCKWISE, steps, speed));
+                instructions.add(handle_id, DeflatedCmdKey(RELATIVE | ANTI_CLOCKWISE, steps * 3 / 4, speed));
+                instructions.add(handle_id, DeflatedCmdKey(RELATIVE | CLOCKWISE, steps / 2, speed));
+            }
+        });
+    instructDelayUntilAllAreReady(instructions, speed, 2.0d);
 }
 
 void instructUsingSwipe(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator)
