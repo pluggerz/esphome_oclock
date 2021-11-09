@@ -16,24 +16,23 @@ constexpr int16_t pulse_time = 40;
 template <uint8_t stepPin, uint8_t dirPin, uint8_t centerPin>
 class Stepper final
 {
+private:
   const StepInt number_of_steps;
   StepInt step_number = 0; // which step the motor is on
 
-private:
+  typedef int32_t TrackTime;     // note this one is very tricky do not change it !
+  TrackTime last_step_time = 0;  // time stamp in micros of when the last step was taken
+  TrackTime first_step_time = 0; // first stamp in micros of when the first steps was taken
+  TrackTime next_step_time = 0;  // expected next time step that we should do a new step
+
 public:
   bool speed_up = false;
 
-
-  typedef int32_t TrackTime;
-  TrackTime last_step_time = 0;  // time stamp in micros of when the last step was taken
-  TrackTime first_step_time = 0; // first stamp in micros of when the first steps was taken
-  TrackTime next_step_time = 0;
-
   bool ghost = false;
   volatile bool defecting = false;
-  int defecting_delay = 0;
   StepInt offset_steps_{0};
   int8_t direction = 0;
+  int16_t defecting_delay = 0;
   int16_t step_delay = 100; // delay between steps, in micros, based on speed
   int16_t step_on_fail_delay = 80;
   int16_t step_current = 0;
