@@ -32,7 +32,7 @@ public:
             result[idx] = rgba_color(color, brightness);
     }
 
-    void setColor(const rgba_color &color)
+    void set_color(const rgba_color &color)
     {
         this->brightness = color.alpha;
         this->color = color;

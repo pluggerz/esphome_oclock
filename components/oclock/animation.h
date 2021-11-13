@@ -361,15 +361,40 @@ extern StepCalculator shortestPathCalculator;
 extern StepCalculator clockwiseCalculator;
 extern StepCalculator antiClockwiseCalculator;
 
+typedef std::function<void(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator)> FinalAnimationFunc;
+
 void instructUsingSwipe(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator);
 void instructUsingStepCalculator(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator);
 
 class InBetweenAnimations
 {
 public:
+    typedef std::function<void(Instructions &instructions, int speed)> Func;
+
+    static void instructNone(Instructions &instructions, int speed)
+    {
+        return;
+    }
+
     static void instructStarAnimation(Instructions &instructions, int speed);
     static void instructDashAnimation(Instructions &instructions, int speed);
     static void instructMiddlePointAnimation(Instructions &instructions, int speed);
     static void instructAllInnerPointAnimation(Instructions &instructions, int speed);
     static void instructPacManAnimation(Instructions &instructions, int speed);
+
+    static void instructRandom(Instructions &instructions, int speed)
+    {
+        switch (random(5))
+        {
+#define CASE(ID, FUNC) \
+    case ID:           \
+        return FUNC(instructions, speed);
+            CASE(0, instructDashAnimation)
+            CASE(1, instructMiddlePointAnimation)
+            CASE(2, instructAllInnerPointAnimation)
+            CASE(3, instructStarAnimation)
+            CASE(4, instructPacManAnimation)
+#undef CASE
+        }
+    }
 };

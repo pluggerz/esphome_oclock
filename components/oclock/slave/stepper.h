@@ -21,11 +21,12 @@ private:
   StepInt step_number = 0; // which step the motor is on
 
   typedef int32_t TrackTime;     // note this one is very tricky do not change it !
-  TrackTime last_step_time = 0;  // time stamp in micros of when the last step was taken
   TrackTime first_step_time = 0; // first stamp in micros of when the first steps was taken
   TrackTime next_step_time = 0;  // expected next time step that we should do a new step
 
 public:
+  TrackTime last_step_time = 0;  // time stamp in micros of when the last step was taken
+  
   bool speed_up = false;
 
   bool ghost = false;

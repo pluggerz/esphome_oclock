@@ -50,7 +50,7 @@ LedAsync ledAsync;
 
 // background layers
 BackgroundLedAnimations::Fixed backgroundLedLayer;
-BackgroundLedAnimations::Fixed offBackgroundLedLayer;
+//BackgroundLedAnimations::Fixed offBackgroundLedLayer;
 BackgroundLedAnimations::Xmas xmasLedLayer;
 BackgroundLedAnimations::Rainbow rainbowLedLayer;
 
@@ -327,14 +327,13 @@ void do_position_request(const UartMessage *msg)
 
 void do_led_mode_request(const LedModeRequest *msg)
 {
-    ledAsync.set_brightness(msg->brightness);
     const auto &mode = msg->mode;
 
     switch (mode % 9)
     {
     case 0:
-        offBackgroundLedLayer.start();
-        ledAsync.set_led_layer(&offBackgroundLedLayer);
+        backgroundLedLayer.start();
+        ledAsync.set_led_layer(&backgroundLedLayer);
         break;
 
 #define CASE_XMAS(CASE, WHAT)                                         \
@@ -360,10 +359,29 @@ void do_led_mode_request(const LedModeRequest *msg)
     }
 }
 
+void do_color_request(const UartColorMessage *msg)
+{
+    backgroundLedLayer.set_color(rgba_color(msg->red, msg->green, msg->blue));
+}
+
+void do_brightness_request(const UartBrightnessMessage *msg)
+{
+    ledAsync.set_brightness(msg->brightness);
+}
+
 auto uartMainListener = [](const UartMessage *msg)
 {
     switch (msg->getMessageType())
     {
+    case MsgType::MSG_BRIGHTNESS:
+        do_brightness_request(reinterpret_cast<const UartBrightnessMessage *>(msg));
+        return true;
+
+
+    case MsgType::MSG_COLOR:
+        do_color_request(reinterpret_cast<const UartColorMessage *>(msg));
+        return true;
+
     case MsgType::MSG_BEGIN_KEYS:
         StepExecutors::process_begin_keys(msg);
         return true;

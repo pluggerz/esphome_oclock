@@ -65,7 +65,7 @@ class oclock::time_tracker::InternalClockTimeTracker final : public oclock::time
 {
     uint64_t currentEpocInSeconds{0};
     uint64_t lastUpdateInMillis{0};
-    const uint8_t multiplier{2};
+    const uint8_t multiplier{3};
 
 public:
     InternalClockTimeTracker() : TimeTracker(F("InternalClockTimeTracker")) {}

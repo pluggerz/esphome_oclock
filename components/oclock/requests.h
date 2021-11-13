@@ -14,6 +14,10 @@ namespace oclock
 {
     namespace requests
     {
+
+        void background_brightness(const float value);
+        void background_color(const int component, const float value);
+
         class AnimationRequest : public oclock::BroadcastRequest
         {
         protected:
@@ -352,6 +356,78 @@ namespace oclock
         {
             const oclock::time_tracker::TimeTracker &tracker;
 
+            StepCalculator selectDistanceCalculator()
+            {
+                auto value = oclock::master.get_handles_distance_mode();
+                switch (value)
+                {
+#define CASE(WHAT, FUNC)               \
+    case HandlesDistanceEnum::WHAT: \
+        return FUNC;
+
+                    CASE(Shortest, shortestPathCalculator)
+                    CASE(Right, clockwiseCalculator)
+                    CASE(Left, antiClockwiseCalculator)
+#undef CASE
+                default:
+                case HandlesDistanceEnum::Random:
+                    switch (random(3))
+                    {
+                    case 0:
+                        return shortestPathCalculator;
+                    case 1:
+                        return clockwiseCalculator;
+                    default:
+                        return antiClockwiseCalculator;
+                    }
+                }
+            }
+
+            InBetweenAnimations::Func selectInBetweenAnimation()
+            {
+                auto value = oclock::master.get_in_between_animation();
+                switch (value)
+                {
+#define CASE(WHAT, FUNC)               \
+    case InBetweenAnimationEnum::WHAT: \
+        return InBetweenAnimations::FUNC;
+
+                    CASE(Random, instructRandom)
+                    CASE(Star, instructStarAnimation)
+                    CASE(Dash, instructDashAnimation)
+                    CASE(Middle1, instructMiddlePointAnimation)
+                    CASE(Middle2, instructAllInnerPointAnimation)
+                    CASE(PacMan, instructPacManAnimation)
+                default:
+                    CASE(None, instructNone)
+#undef CASE
+                }
+            }
+
+            FinalAnimationFunc selectFinalAnimator()  {
+                auto value = oclock::master.get_handles_animation_mode();
+                switch (value)
+                {
+#define CASE(WHAT, FUNC)               \
+    case HandlesAnimationEnum::WHAT: \
+        return FUNC;
+
+                    CASE(Swipe, instructUsingSwipe)
+                    CASE(Distance, instructUsingStepCalculator)
+#undef CASE
+                default:
+                case HandlesAnimationEnum::Random:
+                    switch (random(2))
+                    {
+                    case 0:
+                        return instructUsingSwipe;
+                    case 1:
+                    default:
+                        return instructUsingStepCalculator;
+                    }
+                }
+            }
+
         public:
             TrackTimeRequest(const oclock::time_tracker::TimeTracker &tracker) : tracker(tracker) {}
 
@@ -371,67 +447,18 @@ namespace oclock
 
                 Instructions instructions;
 
+                // final animation
+
+                // inbetween
+                auto inBetweenAnimation = selectInBetweenAnimation();
+                auto distanceCalculator = selectDistanceCalculator();
+                auto finalAnimator = selectFinalAnimator();
+
                 StepCalculator *calculator;
-                auto speed=tracker.get_speed_multiplier() * 12;
-                switch (random(3))
-                {
-                case 0:
-                    calculator = &shortestPathCalculator;
-                    ESP_LOGI(TAG, "Using shortestPathCalculator");
-                    break;
-                case 1:
-                    calculator = &clockwiseCalculator;
-                    ESP_LOGI(TAG, "Using clockwiseCalculator");
-                    break;
-                case 2:
-                default:
-                    calculator = &antiClockwiseCalculator;
-                    ESP_LOGI(TAG, "Using antiClockwiseCalculator");
-                    break;
-                }
-                switch (random(7))
-                {
-                case 0:
-                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
-                    ESP_LOGI(TAG, "Using instructUsingStepCalculator");
-                    break;
+                auto speed = tracker.get_speed_multiplier() * 12;
 
-                case 1:
-                    instructUsingSwipe(instructions, speed, goal, *calculator);
-                    ESP_LOGI(TAG, "Using instructUsingSwipe");
-                    break;
-
-                case 2:
-                    InBetweenAnimations::instructPacManAnimation(instructions, speed);
-                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
-                    ESP_LOGI(TAG, "Using instructPacManAnimation");
-                    break;
-
-                case 3:
-                    InBetweenAnimations::instructAllInnerPointAnimation(instructions, speed);
-                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
-                    ESP_LOGI(TAG, "Using instructAllInnerPointAnimation");
-                    break;
-
-                case 4:
-                    InBetweenAnimations::instructMiddlePointAnimation(instructions, speed);
-                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
-                    ESP_LOGI(TAG, "Using instructMiddlePointAnimation");
-                    break;
-
-                case 5:
-                    InBetweenAnimations::instructDashAnimation(instructions, speed);
-                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
-                    ESP_LOGI(TAG, "Using instructDashAnimation");
-                    break;
-
-                case 6:
-                default:
-                    InBetweenAnimations::instructStarAnimation(instructions, speed);
-                    instructUsingStepCalculator(instructions, speed, goal, *calculator);
-                    ESP_LOGI(TAG, "Using instructStarAnimation");
-                    break;
-                }
+                selectInBetweenAnimation()(instructions, speed);
+                selectFinalAnimator()(instructions, speed, goal, distanceCalculator);
                 sendInstructions(instructions);
             }
         };
@@ -450,46 +477,19 @@ namespace oclock
             }
         };
 
-        class SwitchLedModeRequest final : public oclock::ExecuteRequest
+        class BackgroundModeSelectRequest final : public oclock::ExecuteRequest
         {
         public:
-            SwitchLedModeRequest()
+            BackgroundModeSelectRequest(int mode)
             {
-                // we immediatelly update the brigness, incase we increase it again before sending to the slaves
-                auto current = oclock::master.get_led_background_mode();
-                oclock::master.set_led_background_mode(current + 1);
+                oclock::master.set_led_background_mode(mode);
             }
 
             virtual void execute() override final
             {
                 // just send latests
-                auto brightness = oclock::master.get_brightness();
                 auto mode = oclock::master.get_led_background_mode();
-                send(LedModeRequest(mode, brightness));
-            }
-        };
-
-        class SetBrightnessRequest final : public oclock::ExecuteRequest
-        {
-        public:
-            SetBrightnessRequest(int brightness)
-            {
-                // we immediatelly update the brigness, incase we increase it again before sending to the slaves
-                if (brightness < 0)
-                    brightness = 0;
-                else if (brightness > 31)
-                    brightness = 31;
-                else
-                    brightness = brightness;
-                oclock::master.set_brightness(brightness);
-            }
-
-            virtual void execute() override final
-            {
-                // just send latests
-                auto brightness = master.get_brightness();
-                auto mode = master.get_led_background_mode();
-                send(LedModeRequest(mode, brightness));
+                send(LedModeRequest(mode));
             }
         };
 

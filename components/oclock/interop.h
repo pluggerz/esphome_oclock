@@ -29,6 +29,7 @@ enum MsgType
   MSG_LED_MODE = 13,
   MSG_DUMP_LOG_REQUEST = 14,
   MSG_SLAVE_CONFIG = 15,
+  MSG_BRIGHTNESS = 16,
 };
 
 struct UartMessage
@@ -94,8 +95,7 @@ struct LedModeRequest : public UartMessage
 {
 public:
   uint8_t mode;
-  uint8_t brightness;
-  LedModeRequest(uint8_t mode, uint8_t brightness) : UartMessage(-1, MSG_LED_MODE), mode(mode), brightness(brightness) {}
+  LedModeRequest(uint8_t mode) : UartMessage(-1, MSG_LED_MODE), mode(mode)  {}
 } __attribute__((packed, aligned(1)));
 
 struct UartLogMessage : public UartMessage
@@ -130,6 +130,22 @@ public:
   bool dump_config;
   UartDumpLogsRequest(bool dump_config) : UartMessage(-1, MSG_DUMP_LOG_REQUEST, 0), dump_config(dump_config) {}
   UartDumpLogsRequest(bool dump_config, u8 source_id, u8 destination_id) : UartMessage(source_id, MSG_DUMP_LOG_REQUEST, destination_id), dump_config(dump_config) {}
+} __attribute__((packed, aligned(1)));
+
+struct UartBrightnessMessage : public UartMessage
+{
+public:
+  const uint8_t brightness;
+
+  UartBrightnessMessage(uint8_t brightness) : UartMessage(-1, MSG_BRIGHTNESS), brightness(brightness) {}
+} __attribute__((packed, aligned(1)));
+
+struct UartColorMessage : public UartMessage
+{
+public:
+  uint8_t red, green, blue, brightness;
+
+  UartColorMessage() : UartMessage(-1, MSG_COLOR) {}
 } __attribute__((packed, aligned(1)));
 
 class InteropStringifier
