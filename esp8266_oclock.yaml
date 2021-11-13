@@ -1,0 +1,89 @@
+esphome:
+  name: matrix
+  platform: ESP8266
+  board: nodemcuv2
+      
+# Enable logging ( and disable for UART )
+logger:
+  baud_rate: 0
+  level: INFO
+
+# Enable Home Assistant API
+api:
+  password: !secret api_password 
+
+ota:
+  password: !secret ota_password
+  
+wifi:
+   ssid: !secret wifi_ssid
+   password: !secret wifi_password
+
+text_sensor:
+  - platform: version
+    name: "clock_text"
+
+time:
+  - platform: homeassistant
+    id: hass_time
+
+captive_portal:
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/pluggerz/esphome_oclock.git
+#      type: local
+#      path: /Users/birdie/Git/esphome_oclock/components
+    refresh: 0min
+
+light:
+  - platform: rgb
+    name: "Background Solid Color "
+    red: red_id
+    green: green_id
+    blue: blue_id
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: monochromatic
+    name: "Background Brightness"
+    output: brightness_id
+    restore_mode: RESTORE_DEFAULT_ON
+
+
+select: # how to include from the code !?
+  - platform: template
+    name: "Select Platform Template" # try to move inside the code?
+    optimistic: true
+    restore_value: true
+    options:
+      - one
+      - two
+      - three
+    initial_option: two
+
+
+switch:
+  - platform: restart
+    name: "Restart Master"
+
+oclock:
+  count_start: -1 # default is -1
+  time_id: hass_time
+  slaves:
+    "*":
+      H0: 608  
+      H1: -628
+    S0: 20 #20
+    S1: 22 #22
+  brightness:
+    initial_value: 31
+  light:
+    red:
+      id: red_id
+    green:
+      id: green_id
+    blue:
+      id: blue_id
+    brightness:
+      id: brightness_id
+      
