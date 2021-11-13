@@ -10,23 +10,23 @@ using namespace esphome;
 
 typedef std::function<int(int from, int to)> StepCalculator;
 
-StepCalculator shortestPathCalculator = [](int from, int to)
+DistanceCalculators::Func DistanceCalculators::shortest = [](int from, int to)
 {
     bool clockwise = Distance::clockwise(from, to) < Distance::antiClockwise(from, to);
     return clockwise ? Distance::clockwise(from, to) : -Distance::antiClockwise(from, to);
 };
 
-StepCalculator clockwiseCalculator = [](int from, int to)
+DistanceCalculators::Func DistanceCalculators::clockwise = [](int from, int to)
 {
     return Distance::clockwise(from, to);
 };
 
-StepCalculator antiClockwiseCalculator = [](int from, int to)
+DistanceCalculators::Func DistanceCalculators::antiClockwise = [](int from, int to)
 {
     return -Distance::antiClockwise(from, to);
 };
 
-void instructUsingStepCalculatorForHandle(Instructions &instructions, int speed, int handle_id, int to, const StepCalculator &calculator)
+void instructUsingStepCalculatorForHandle(Instructions &instructions, int speed, int handle_id, int to, const DistanceCalculators::Func &calculator)
 {
     auto from = instructions[handle_id];
     auto steps = calculator(from, to);
@@ -39,7 +39,7 @@ void instructUsingStepCalculatorForHandle(Instructions &instructions, int speed,
     instructions.add(handle_id, DeflatedCmdKey(clockwiseMode | CmdEnum::ABSOLUTE, to, speed));
 }
 
-void instructUsingStepCalculator(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &calculator)
+void HandlesAnimations::instructUsingStepCalculator(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &calculator)
 {
     for (int clock_id = 0; clock_id < MAX_SLAVES; ++clock_id)
     {
@@ -243,7 +243,7 @@ void InBetweenAnimations::instructStarAnimation(Instructions &instructions, int 
         auto case_id = 2 * row_id + row_id;
         start.set_ticks(handle_id, start_array[case_id]);
     };
-    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    HandlesAnimations::instructUsingStepCalculator(instructions, speed, start, DistanceCalculators::shortest);
     instructDelayUntilAllAreReady(instructions, speed, 2.0d);
     for (int handle_id = 0; handle_id < MAX_HANDLES; ++handle_id)
     {
@@ -279,7 +279,7 @@ void InBetweenAnimations::instructPacManAnimation(Instructions &instructions, in
             }
         });
     // lets go there
-    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    HandlesAnimations::instructUsingStepCalculator(instructions, speed, start, DistanceCalculators::shortest);
     // some delay
     instructDelayUntilAllAreReady(instructions, speed, 2.0d);
     const int randomness[2] = {NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 2), NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 4)};
@@ -309,7 +309,7 @@ void InBetweenAnimations::instructAllInnerPointAnimation(Instructions &instructi
         [&](int handle_id)
         { start.set_ticks(handle_id, origin_function(handle_id) + NUMBER_OF_STEPS / 2); });
     // lets go there
-    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    HandlesAnimations::instructUsingStepCalculator(instructions, speed, start, DistanceCalculators::shortest);
     // some delay
     instructDelayUntilAllAreReady(instructions, speed, 2.0d);
     const int randomness[2] = {NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 2), NUMBER_OF_STEPS / 2 + random(NUMBER_OF_STEPS / 4)};
@@ -330,7 +330,7 @@ void InBetweenAnimations::instructMiddlePointAnimation(Instructions &instruction
         [&](int handle_id)
         { start.set_ticks(handle_id, origin_function(handle_id)); });
     // lets go there
-    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    HandlesAnimations::instructUsingStepCalculator(instructions, speed, start, DistanceCalculators::shortest);
     // some delay
     instructDelayUntilAllAreReady(instructions, speed, 2.0d);
     instructions.iterate_handle_ids(
@@ -368,7 +368,7 @@ void InBetweenAnimations::instructDashAnimation(Instructions &instructions, int 
         [&](int handle_id)
         { start.set_ticks(handle_id, case_func(handle_id) == 0 ? NUMBER_OF_STEPS / 2 : 0); });
     // lets go there
-    instructUsingStepCalculator(instructions, speed, start, shortestPathCalculator);
+    HandlesAnimations::instructUsingStepCalculator(instructions, speed, start, DistanceCalculators::shortest);
     // some delay
     instructDelayUntilAllAreReady(instructions, speed, 2.0d);
     // our animation
@@ -387,7 +387,7 @@ void InBetweenAnimations::instructDashAnimation(Instructions &instructions, int 
     instructDelayUntilAllAreReady(instructions, speed, 2.0d);
 }
 
-void instructUsingSwipe(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator)
+void HandlesAnimations::instruct_using_swipe(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator)
 {
     // find shortes path
     int optimal_base_tick = 0;

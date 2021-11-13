@@ -356,15 +356,51 @@ public:
     };
 };
 
-typedef std::function<int(int from, int to)> StepCalculator;
-extern StepCalculator shortestPathCalculator;
-extern StepCalculator clockwiseCalculator;
-extern StepCalculator antiClockwiseCalculator;
+class DistanceCalculators
+{
+public:
+    typedef std::function<int(int from, int to)> Func;
 
-typedef std::function<void(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator)> FinalAnimationFunc;
+    static Func shortest;
+    static Func clockwise;
+    static Func antiClockwise;
 
-void instructUsingSwipe(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator);
-void instructUsingStepCalculator(Instructions &instructions, int speed, const HandlesState &goal, const StepCalculator &steps_calculator);
+    static Func random()
+    {
+        switch (::random(3))
+        {
+#define CASE(ID, FUNC) \
+    case ID:           \
+        return FUNC;
+            CASE(0, shortest)
+            CASE(1, clockwise)
+            CASE(2, antiClockwise)
+#undef CASE
+        }
+    }
+};
+
+class HandlesAnimations
+{
+public:
+    typedef std::function<void(Instructions &instructions, int speed, const HandlesState &goal, const DistanceCalculators::Func &steps_calculator)> Func;
+
+    static void instruct_using_swipe(Instructions &instructions, int speed, const HandlesState &goal, const DistanceCalculators::Func &steps_calculator);
+    static void instructUsingStepCalculator(Instructions &instructions, int speed, const HandlesState &goal, const DistanceCalculators::Func &steps_calculator);
+
+    static void instruct_using_random(Instructions &instructions, int speed, const HandlesState &goal, const DistanceCalculators::Func &steps_calculator)
+    {
+        switch (::random(2))
+        {
+#define CASE(ID, FUNC) \
+    case ID:           \
+        return FUNC(instructions, speed, goal, steps_calculator);
+            CASE(0, instruct_using_swipe)
+            CASE(1, instructUsingStepCalculator)
+#undef CASE
+        }
+    }
+};
 
 class InBetweenAnimations
 {

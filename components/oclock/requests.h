@@ -356,30 +356,20 @@ namespace oclock
         {
             const oclock::time_tracker::TimeTracker &tracker;
 
-            StepCalculator selectDistanceCalculator()
+            DistanceCalculators::Func selectDistanceCalculator()
             {
                 auto value = oclock::master.get_handles_distance_mode();
                 switch (value)
                 {
-#define CASE(WHAT, FUNC)               \
+#define CASE(WHAT, FUNC)            \
     case HandlesDistanceEnum::WHAT: \
-        return FUNC;
+        return DistanceCalculators::FUNC;
 
-                    CASE(Shortest, shortestPathCalculator)
-                    CASE(Right, clockwiseCalculator)
-                    CASE(Left, antiClockwiseCalculator)
+                    CASE(Shortest, shortest)
+                    CASE(Right, clockwise)
+                    CASE(Left, antiClockwise)
+                    CASE(Random, random())
 #undef CASE
-                default:
-                case HandlesDistanceEnum::Random:
-                    switch (random(3))
-                    {
-                    case 0:
-                        return shortestPathCalculator;
-                    case 1:
-                        return clockwiseCalculator;
-                    default:
-                        return antiClockwiseCalculator;
-                    }
                 }
             }
 
@@ -404,27 +394,19 @@ namespace oclock
                 }
             }
 
-            FinalAnimationFunc selectFinalAnimator()  {
+            HandlesAnimations::Func selectFinalAnimator()
+            {
                 auto value = oclock::master.get_handles_animation_mode();
                 switch (value)
                 {
-#define CASE(WHAT, FUNC)               \
+#define CASE(WHAT, FUNC)             \
     case HandlesAnimationEnum::WHAT: \
-        return FUNC;
+        return HandlesAnimations::FUNC;
 
-                    CASE(Swipe, instructUsingSwipe)
+                    CASE(Swipe, instruct_using_swipe)
                     CASE(Distance, instructUsingStepCalculator)
+                    CASE(Random, instruct_using_random)
 #undef CASE
-                default:
-                case HandlesAnimationEnum::Random:
-                    switch (random(2))
-                    {
-                    case 0:
-                        return instructUsingSwipe;
-                    case 1:
-                    default:
-                        return instructUsingStepCalculator;
-                    }
                 }
             }
 
@@ -454,7 +436,6 @@ namespace oclock
                 auto distanceCalculator = selectDistanceCalculator();
                 auto finalAnimator = selectFinalAnimator();
 
-                StepCalculator *calculator;
                 auto speed = tracker.get_speed_multiplier() * 12;
 
                 selectInBetweenAnimation()(instructions, speed);
