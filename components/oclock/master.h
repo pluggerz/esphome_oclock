@@ -25,8 +25,8 @@ namespace oclock
         Middle2,
         PacMan,
     };
-    
-    enum class HandlesDistanceEnum 
+
+    enum class HandlesDistanceEnum
     {
         Random,
         Shortest,
@@ -41,11 +41,21 @@ namespace oclock
         Distance,
     };
 
+    enum class ActiveMode
+    {
+        None,
+        TrackHassioTime,
+        TrackInternalTime,
+        TrackTestTime,
+    };
+
     class Master
     {
         SlaveConfig slaves_[24];
         int background_led_mode_{0};
         int brightness_{0};
+        int base_speed{12};
+        ActiveMode active_mode{ActiveMode::None};
 
         long op_delay_t_millis{0};
         void loop_pre_accept(Millis t);
@@ -57,6 +67,12 @@ namespace oclock
         void reset();
         SlaveConfig &slave(int idx) { return slaves_[idx]; }
 
+        ActiveMode get_active_mode() const { return active_mode; }
+        void set_active_mode(const ActiveMode &value) { active_mode = value; }
+
+        int get_base_speed() const { return base_speed; }
+        void set_base_speed(int value) { base_speed = value; }
+
         int get_led_background_mode() const { return background_led_mode_; }
         void set_led_background_mode(int value) { background_led_mode_ = value; }
 
@@ -65,7 +81,6 @@ namespace oclock
 
         void set_handles_distance_mode(HandlesDistanceEnum value) { distance_mode = value; }
         HandlesDistanceEnum get_handles_distance_mode() const { return distance_mode; }
-
 
         void set_handles_animation_mode(HandlesAnimationEnum value) { handles_mode = value; }
         HandlesAnimationEnum get_handles_animation_mode() const { return handles_mode; }

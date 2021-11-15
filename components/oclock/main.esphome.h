@@ -6,6 +6,7 @@
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/output/float_output.h"
 #include "esphome/components/template/select/template_select.h"
+#include "esphome/components/template/number/template_number.h"
 
 namespace oclock
 {
@@ -87,6 +88,98 @@ namespace oclock
         virtual void execute_state_change(const int &value) override
         {
             oclock::queue(new requests::BackgroundModeSelectRequest(value));
+        }
+    };
+
+    class TrackTimeTask final : public AsyncDelay
+    {
+        const oclock::time_tracker::TimeTracker &tracker;
+        int last_minute{tracker.now().minute};
+
+        virtual void setup(Micros _) override
+        {
+            AsyncDelay::setup(_);
+
+            auto now = tracker.now();
+            ESP_LOGI(TAG, "Now is the time %02d:%02d (%S) note: last_minute=%d", now.hour, now.minute, tracker.name(), last_minute);
+        }
+
+        virtual void step() override
+        {
+            auto now = tracker.now();
+            int minute = now.minute;
+            if (minute == last_minute)
+            {
+                return;
+            }
+            last_minute = minute;
+            ESP_LOGI(TAG, "Lets animate for time %02d:%02d (%S) note: last_minute=%d", now.hour, now.minute, tracker.name(), last_minute);
+            oclock::queue(new requests::TrackTimeRequest(tracker));
+        };
+
+    public:
+        TrackTimeTask(const oclock::time_tracker::TimeTracker &tracker) : AsyncDelay(100), tracker(tracker) {}
+    };
+
+    class ActiveModeSelect : public AbstractSelect<ActiveMode>
+    {
+    public:
+        ActiveModeSelect()
+        {
+            modes["None"] = ActiveMode::None;
+            modes["TrackHassioTime"] = ActiveMode::TrackHassioTime;
+            modes["TrackInternalTime"] = ActiveMode::TrackInternalTime;
+            modes["TrackTestTime"] = ActiveMode::TrackTestTime;
+
+            init();
+
+            this->set_initial_option("None");
+            this->set_name("Active Mode");
+        }
+
+        virtual void execute_state_change(const ActiveMode &value) override
+        {
+            oclock::master.set_active_mode(value);
+            switch (value)
+            {
+            case ActiveMode::TrackHassioTime:
+                AsyncRegister::byName("time_tracker", new TrackTimeTask(oclock::time_tracker::realTimeTracker));
+                break;
+
+            case ActiveMode::TrackInternalTime:
+                AsyncRegister::byName("time_tracker", new TrackTimeTask(oclock::time_tracker::internalClockTimeTracker));
+                break;
+
+            case ActiveMode::TrackTestTime:
+                AsyncRegister::byName("time_tracker", nullptr);
+                class TrackTestTime : public Async
+                {
+                    int hour = -1, minute = -1;
+                    Millis t0 = ::millis();
+
+                public:
+                    virtual void loop(Micros micros) override
+                    {
+                        Millis millis = micros / 1000;
+                        if (millis - t0 < 5000)
+                            return;
+
+                        if (minute == oclock::time_tracker::testTimeTracker.get().minute &&
+                            hour == oclock::time_tracker::testTimeTracker.get().hour)
+                            return;
+
+                        minute = oclock::time_tracker::testTimeTracker.get().minute;
+                        hour = oclock::time_tracker::testTimeTracker.get().hour;
+                        oclock::queue(new requests::TrackTimeRequest(oclock::time_tracker::testTimeTracker));
+                    }
+                };
+                AsyncRegister::byName("time_tracker", new TrackTestTime());
+                break;
+
+            case ActiveMode::None:
+                AsyncRegister::byName("time_tracker", nullptr);
+                break;
+            }
         }
     };
 
@@ -178,6 +271,132 @@ namespace oclock
         }
     };
 
+    class NumberControlEx : public template_::TemplateNumber
+    {
+        virtual void follow_state() = 0;
+
+        virtual void update() override
+        {
+            TemplateNumber::update();
+            follow_state();
+        }
+
+        virtual void control(float value) override
+        {
+            auto rounded_value = int(value);
+            TemplateNumber::control(rounded_value);
+            follow_state();
+        }
+
+    public:
+        NumberControlEx()
+        {
+            set_restore_value(true);
+            this->set_update_interval(60000);
+            this->set_component_source("template.number");
+            App.register_component(this);
+            App.register_number(this);
+            this->set_disabled_by_default(false);
+            this->set_optimistic(true);
+        }
+    };
+
+    class SpeedControl : NumberControlEx
+    {
+    public:
+        virtual void follow_state() override
+        {
+            if (has_state_)
+                oclock::master.set_base_speed(state);
+        }
+
+        SpeedControl()
+        {
+            this->set_name("Speed");
+            this->set_initial_value(12);
+            this->traits.set_min_value(1.0f);
+            this->traits.set_max_value(24.0f);
+            this->traits.set_step(1.0f);
+        }
+    };
+
+    class TurnSpeedControl : NumberControlEx
+    {
+    public:
+        virtual void follow_state() override
+        {
+            if (has_state_)
+                Instructions::turn_speed = state;
+        }
+
+        TurnSpeedControl()
+        {
+            this->set_name("Turn Speed");
+            this->set_initial_value(8);
+            this->traits.set_min_value(1.0f);
+            this->traits.set_max_value(24.0f);
+            this->traits.set_step(1.0f);
+        }
+    };
+    class TurnStepsControl : NumberControlEx
+    {
+    public:
+        virtual void follow_state() override
+        {
+            if (has_state_)
+                Instructions::turn_speed_steps = state;
+        }
+
+        TurnStepsControl()
+        {
+            this->set_name("Turn Steps");
+            this->set_initial_value(4);
+            this->traits.set_min_value(0.0f);
+            this->traits.set_max_value(90.0f);
+            this->traits.set_step(1.0f);
+        }
+    };
+
+    class TestHourControl : public NumberControlEx
+    {
+    public:
+        virtual void follow_state() override
+        {
+            if (!has_state_)
+                return;
+            oclock::time_tracker::testTimeTracker.set_hour(state);
+        }
+
+        TestHourControl()
+        {
+            this->set_name("Test Hour Digits");
+            this->set_initial_value(0);
+            this->traits.set_min_value(0.0f);
+            this->traits.set_max_value(24.0f);
+            this->traits.set_step(1.0f);
+        }
+    };
+
+    class TestMinuteControl : public NumberControlEx
+    {
+    public:
+        virtual void follow_state() override
+        {
+            if (!has_state_)
+                return;
+            oclock::time_tracker::testTimeTracker.set_minute(state);
+        }
+
+        TestMinuteControl()
+        {
+            this->set_name("Test Minute Digits");
+            this->set_initial_value(0);
+            this->traits.set_min_value(0.0f);
+            this->traits.set_max_value(60.0f);
+            this->traits.set_step(1.0f);
+        }
+    };
+
     class NumberControl final : public number::Number, public Component
     {
         typedef std::function<void(int value)> Listener;
@@ -223,56 +442,6 @@ namespace oclock
             publish_state(false);
             oclock::queue(new requests::TrackTimeRequest(oclock::time_tracker::testTimeTracker));
             AsyncRegister::byName("time_tracker", nullptr);
-        }
-    };
-
-    class TrackTimeTask final : public AsyncDelay
-    {
-        const oclock::time_tracker::TimeTracker &tracker;
-        int last_minute{tracker.now().minute};
-
-        virtual void setup(Micros _) override
-        {
-            AsyncDelay::setup(_);
-
-            auto now = tracker.now();
-            ESP_LOGI(TAG, "Now is the time %02d:%02d (%S) note: last_minute=%d", now.hour, now.minute, tracker.name(), last_minute);
-        }
-
-        virtual void step() override
-        {
-            auto now = tracker.now();
-            int minute = now.minute;
-            if (minute == last_minute)
-            {
-                return;
-            }
-            last_minute = minute;
-            ESP_LOGI(TAG, "Lets animate for time %02d:%02d (%S) note: last_minute=%d", now.hour, now.minute, tracker.name(), last_minute);
-            oclock::queue(new requests::TrackTimeRequest(tracker));
-        };
-
-    public:
-        TrackTimeTask(const oclock::time_tracker::TimeTracker &tracker) : AsyncDelay(100), tracker(tracker) {}
-    };
-
-    class TrackHassioTime : public esphome::switch_::Switch
-    {
-    public:
-        virtual void write_state(bool state) override
-        {
-            publish_state(false);
-            AsyncRegister::byName("time_tracker", new TrackTimeTask(oclock::time_tracker::realTimeTracker));
-        }
-    };
-
-    class TrackInternalTime : public esphome::switch_::Switch
-    {
-    public:
-        virtual void write_state(bool state) override
-        {
-            publish_state(false);
-            AsyncRegister::byName("time_tracker", new TrackTimeTask(oclock::time_tracker::internalClockTimeTracker));
         }
     };
 

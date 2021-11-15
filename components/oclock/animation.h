@@ -241,8 +241,8 @@ public:
     static const bool send_relative;
     std::vector<HandleCmd> cmds;
     uint64_t speed_detection{~uint64_t(0)};
-    int turn_speed{8};
-    int turn_speed_steps{5};
+    static int turn_speed;
+    static int turn_speed_steps;
 
     void iterate_handle_ids(std::function<void(int handle_id)> func)
     {
@@ -367,16 +367,8 @@ public:
 
     static Func random()
     {
-        switch (::random(3))
-        {
-#define CASE(ID, FUNC) \
-    case ID:           \
-        return FUNC;
-            CASE(0, shortest)
-            CASE(1, clockwise)
-            CASE(2, antiClockwise)
-#undef CASE
-        }
+        std::vector<Func> options = {shortest, clockwise, antiClockwise};
+        return options[::random(options.size())];
     }
 };
 
@@ -390,15 +382,8 @@ public:
 
     static void instruct_using_random(Instructions &instructions, int speed, const HandlesState &goal, const DistanceCalculators::Func &steps_calculator)
     {
-        switch (::random(2))
-        {
-#define CASE(ID, FUNC) \
-    case ID:           \
-        return FUNC(instructions, speed, goal, steps_calculator);
-            CASE(0, instruct_using_swipe)
-            CASE(1, instructUsingStepCalculator)
-#undef CASE
-        }
+        std::vector<Func> options = {instruct_using_swipe, instructUsingStepCalculator};
+        options[::random(options.size())](instructions, speed, goal, steps_calculator);
     }
 };
 
@@ -420,17 +405,7 @@ public:
 
     static void instructRandom(Instructions &instructions, int speed)
     {
-        switch (random(5))
-        {
-#define CASE(ID, FUNC) \
-    case ID:           \
-        return FUNC(instructions, speed);
-            CASE(0, instructDashAnimation)
-            CASE(1, instructMiddlePointAnimation)
-            CASE(2, instructAllInnerPointAnimation)
-            CASE(3, instructStarAnimation)
-            CASE(4, instructPacManAnimation)
-#undef CASE
-        }
+        std::vector<Func> options = {instructDashAnimation, instructMiddlePointAnimation, instructAllInnerPointAnimation, instructStarAnimation, instructPacManAnimation};
+        options[::random(options.size())](instructions, speed);
     }
 };

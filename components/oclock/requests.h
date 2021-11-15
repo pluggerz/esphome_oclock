@@ -368,6 +368,7 @@ namespace oclock
                     CASE(Shortest, shortest)
                     CASE(Right, clockwise)
                     CASE(Left, antiClockwise)
+                default:
                     CASE(Random, random())
 #undef CASE
                 }
@@ -405,6 +406,7 @@ namespace oclock
 
                     CASE(Swipe, instruct_using_swipe)
                     CASE(Distance, instructUsingStepCalculator)
+                default:
                     CASE(Random, instruct_using_random)
 #undef CASE
                 }
@@ -436,7 +438,7 @@ namespace oclock
                 auto distanceCalculator = selectDistanceCalculator();
                 auto finalAnimator = selectFinalAnimator();
 
-                auto speed = tracker.get_speed_multiplier() * 12;
+                auto speed = tracker.get_speed_multiplier() * oclock::master.get_base_speed();
 
                 selectInBetweenAnimation()(instructions, speed);
                 selectFinalAnimator()(instructions, speed, goal, distanceCalculator);

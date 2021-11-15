@@ -15,8 +15,6 @@ CONF_SLAVES = "slaves"
 CONF_HANDLE0 = "H0"
 CONF_HANDLE1 = "H1"
 CONF_ANIMATION_SLAVE_ID = "animation_slave_id"
-CONF_HOUR = "hour"
-CONF_MINUTE = "minute"
 
 
 AUTO_LOAD = [
@@ -78,28 +76,6 @@ def cv_slaves_check(conf):
     return d
 
 
-HOUR_SCHEMA = number.NUMBER_SCHEMA.extend(cv.COMPONENT_SCHEMA).extend(
-    {
-        cv.GenerateID(): cv.declare_id(NumberControl),
-        cv.Optional(CONF_NAME, default="hour"): cv.string_strict,
-        cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
-        cv.Optional(CONF_MAX_VALUE, default=23): cv.float_,
-        cv.Optional(CONF_STEP, default=1): cv.float_,
-        cv.Optional(CONF_INITIAL_VALUE, default=0): cv.float_,
-    })
-
-
-MINUTE_SCHEMA = number.NUMBER_SCHEMA.extend(cv.COMPONENT_SCHEMA).extend(
-    {
-        cv.GenerateID(): cv.declare_id(NumberControl),
-        cv.Optional(CONF_NAME, default="minute"): cv.string_strict,
-        cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
-        cv.Optional(CONF_MAX_VALUE, default=31): cv.float_,
-        cv.Optional(CONF_STEP, default=1): cv.float_,
-        cv.Optional(CONF_INITIAL_VALUE, default=0): cv.float_,
-    })
-
-
 BRIGHTNESS_SCHEMA = number.NUMBER_SCHEMA.extend(cv.COMPONENT_SCHEMA).extend(
     {
         cv.GenerateID(): cv.declare_id(NumberControl),
@@ -129,8 +105,6 @@ CONFIG_SCHEMA = _Schema(
         cv.Optional(CONF_COUNT_START, -1): cv.int_range(min=-1, max=64),
         cv.Required(CONF_SLAVES): cv_slaves_check,
         cv.Optional(CONF_BRIGHTNESS, default={}): BRIGHTNESS_SCHEMA,
-        cv.Optional(CONF_HOUR, default={}): HOUR_SCHEMA,
-        cv.Optional(CONF_MINUTE, default={}): MINUTE_SCHEMA,
         cv.Required(CONF_LIGHT): RGBLIGHT_SCHEMA,
     }
 )
@@ -205,17 +179,6 @@ async def to_code(config):
                         cg.RawExpression(
                             "[](float value){ oclock::requests::background_brightness(value); }")
                         )
-    hourVar = await add_number(config[CONF_HOUR])
-    cg.add(hourVar.set_listener(cg.RawExpression(
-        "[](int value){oclock::time_tracker::testTimeTracker.set_hour(value); }")
-    ))
-
-    minuteVar = await add_number(config[CONF_MINUTE])
-    cg.add(minuteVar.set_listener(
-        cg.RawExpression(
-            "[](int value){oclock::time_tracker::testTimeTracker.set_minute(value); }")
-    ))
-
     
     # https://github.com/esphome/AsyncTCP/blob/master/library.json
     cg.add_library(name="apa102-arduino", version=None,
@@ -237,16 +200,18 @@ async def to_code(config):
     await cg_add_switch("oclock_speed_check064", cg.RawExpression("new oclock::SpeedCheckSwitch64()"))
     await cg_add_switch("oclock_speed_adapt", cg.RawExpression("new oclock::SpeedAdaptTestSwitch()"))
 
-    await cg_add_switch("oclock_track_test_time", cg.RawExpression("new oclock::TrackTestTime()"))
-    await cg_add_switch("oclock_track_hassio_time", cg.RawExpression("new oclock::TrackHassioTime()"))
-    await cg_add_switch("oclock_track_internal_time", cg.RawExpression("new oclock::TrackInternalTime()"))
-
     await cg_add_switch("oclock_reset", cg.RawExpression("new oclock::ResetSwitch()"))
     await cg_add_switch("oclock_request_positions", cg.RawExpression("new oclock::RequestPositions()"))
     await cg_add_switch("oclock_dump_logs", cg.RawExpression("new oclock::DumpLogsSwitch()"))
     await cg_add_switch("oclock_dump_config", cg.RawExpression("new oclock::DumpConfigSwitch()"))
     await cg_add_switch("oclock_dump_config_slaves", cg.RawExpression("new oclock::DumpConfigSlavesSwitch()"))
 
+    cg.add(cg.RawExpression("new oclock::TurnSpeedControl();"));
+    cg.add(cg.RawExpression("new oclock::TurnStepsControl();"));
+    cg.add(cg.RawExpression("new oclock::ActiveModeSelect();"));
+    cg.add(cg.RawExpression("new oclock::TestMinuteControl();"));
+    cg.add(cg.RawExpression("new oclock::TestHourControl();"));
+    cg.add(cg.RawExpression("new oclock::SpeedControl();"));
     cg.add(cg.RawExpression("new oclock::BackgroundModeSelect();"));
     cg.add(cg.RawExpression("new oclock::HandlesInBetweenAnimationModeSelect();"));
     cg.add(cg.RawExpression("new oclock::HandlesDistanceModeSelect();"));

@@ -10,6 +10,10 @@ using namespace esphome;
 
 typedef std::function<int(int from, int to)> StepCalculator;
 
+ int Instructions::turn_speed{8};
+ int Instructions::turn_speed_steps{5};
+
+
 DistanceCalculators::Func DistanceCalculators::shortest = [](int from, int to)
 {
     bool clockwise = Distance::clockwise(from, to) < Distance::antiClockwise(from, to);
