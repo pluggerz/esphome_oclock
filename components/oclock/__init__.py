@@ -206,6 +206,7 @@ async def to_code(config):
     await cg_add_switch("oclock_dump_config", cg.RawExpression("new oclock::DumpConfigSwitch()"))
     await cg_add_switch("oclock_dump_config_slaves", cg.RawExpression("new oclock::DumpConfigSlavesSwitch()"))
 
+    cg.add(cg.RawExpression("new oclock::DebugLedLayerSwitch();"));
     cg.add(cg.RawExpression("new oclock::TurnSpeedControl();"));
     cg.add(cg.RawExpression("new oclock::TurnStepsControl();"));
     cg.add(cg.RawExpression("new oclock::ActiveModeSelect();"));

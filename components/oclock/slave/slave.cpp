@@ -162,7 +162,7 @@ void setup()
     change_to_init();
 
     //  ledAsync.set_led_layer(&followHandlesLedLayer);
-    ledAsync.set_led_layer(&debugLedLayer());
+    ledAsync.set_foreground_led_layer(&debugLedLayer());
 }
 
 void pushLog(bool overflow, uint8_t part, uint8_t total_parts)
@@ -377,6 +377,16 @@ auto uartMainListener = [](const UartMessage *msg)
         do_brightness_request(reinterpret_cast<const UartBrightnessMessage *>(msg));
         return true;
 
+    case MsgType::MSG_BOOL_DEBUG_LED_LAYER:
+        if (reinterpret_cast<const UartBoolMessage *>(msg)->value)
+        {
+            ledAsync.set_foreground_led_layer(&debugLedLayer());
+        }
+        else
+        {
+            ledAsync.set_foreground_led_layer(nullptr);
+        }
+        return true;
 
     case MsgType::MSG_COLOR:
         do_color_request(reinterpret_cast<const UartColorMessage *>(msg));

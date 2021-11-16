@@ -7,9 +7,51 @@
 #include "esphome/components/output/float_output.h"
 #include "esphome/components/template/select/template_select.h"
 #include "esphome/components/template/number/template_number.h"
+#include "esphome/components/template/switch/template_switch.h"
 
 namespace oclock
 {
+    class AbstractSwitch : public template_::TemplateSwitch
+    {
+    protected:
+        virtual void write_state(bool state) override
+        {
+            TemplateSwitch::write_state(state);
+            if (state)
+                turn_on();
+            else
+                turn_off();
+        }
+
+    public:
+        virtual void change(bool state) {}
+        virtual void turn_on() { change(true); };
+        virtual void turn_off() { change(false); };
+
+        AbstractSwitch(const std::string &name)
+        {
+            this->set_component_source("template.switch");
+            App.register_component(this);
+            App.register_switch(this);
+            this->set_name(name);
+            this->set_disabled_by_default(false);
+            this->set_optimistic(true);
+            this->set_assumed_state(false);
+            this->set_restore_state(true);
+        }
+    };
+
+    class DebugLedLayerSwitch : public AbstractSwitch
+    {
+    public:
+        DebugLedLayerSwitch() : AbstractSwitch("Debug Led Layer") {}
+
+        virtual void change(bool state) override
+        {
+            oclock::queue_message(UartBoolMessage(MSG_BOOL_DEBUG_LED_LAYER, state));
+        }
+    };
+
     template <class V>
     class AbstractSelect : public template_::TemplateSelect
     {

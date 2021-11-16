@@ -69,7 +69,7 @@ class ForegroundLayer : public LedLayer
 {
 };
 
-class LedAsync 
+class LedAsync
 {
 private:
     BackgroundLayer *backgroundLayer_{nullptr};
@@ -126,7 +126,7 @@ public:
     void loop(Micros nowMicros)
     {
         auto now = nowMicros / 1000;
-        
+
         if (now - last < 20)
         {
             return;
@@ -171,26 +171,26 @@ public:
             return;
 
         backgroundLayer_ = ledLayer;
-        if (!backgroundLayer_)
+        if (backgroundLayer_)
         {
             backgroundLayer_->start();
             backgroundLayer_->update(micros());
-            updateLeds();
         }
+        updateLeds();
     }
 
-    void set_led_layer(ForegroundLayer *ledLayer)
+    void set_foreground_led_layer(ForegroundLayer *ledLayer)
     {
         if (foregroundLayer_ == ledLayer)
             return;
 
         foregroundLayer_ = ledLayer;
-        if (!foregroundLayer_)
+        if (foregroundLayer_)
         {
             foregroundLayer_->start();
             foregroundLayer_->update(micros());
-            updateLeds();
         }
+        updateLeds();
     }
 };
 

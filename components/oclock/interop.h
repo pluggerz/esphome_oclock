@@ -30,6 +30,7 @@ enum MsgType
   MSG_DUMP_LOG_REQUEST = 14,
   MSG_SLAVE_CONFIG = 15,
   MSG_BRIGHTNESS = 16,
+  MSG_BOOL_DEBUG_LED_LAYER = 17,
 };
 
 struct UartMessage
@@ -51,6 +52,14 @@ public:
   {
     return (MsgType)msgType;
   }
+} __attribute__((packed, aligned(1)));
+
+struct UartBoolMessage : public UartMessage
+{
+public:
+  const bool value;
+
+  UartBoolMessage(MsgType msgType, bool value) : UartMessage(-1, msgType), value(value) {}
 } __attribute__((packed, aligned(1)));
 
 struct UartAcceptMessage : public UartMessage
@@ -95,7 +104,7 @@ struct LedModeRequest : public UartMessage
 {
 public:
   uint8_t mode;
-  LedModeRequest(uint8_t mode) : UartMessage(-1, MSG_LED_MODE), mode(mode)  {}
+  LedModeRequest(uint8_t mode) : UartMessage(-1, MSG_LED_MODE), mode(mode) {}
 } __attribute__((packed, aligned(1)));
 
 struct UartLogMessage : public UartMessage
@@ -426,6 +435,21 @@ namespace oclock
   };
 
   // queue and its variants are implemented in master.cpp
+
   void queue(ExecuteRequest *request);
   void queue(BroadcastRequest *request);
+
+  template <class M>
+  void queue_message(const M &msg)
+  {
+    class SendRequest : public ExecuteRequest
+    {
+    public:
+      const M msg;
+      SendRequest(const M &msg) : msg(msg){};
+
+      virtual void execute() override { send(msg); }
+    };
+    oclock::queue(new SendRequest(msg));
+  }
 } // namespace oclock

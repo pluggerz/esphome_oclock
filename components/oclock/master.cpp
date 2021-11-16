@@ -362,29 +362,29 @@ void oclock::queue(ExecuteRequest *request)
     open_requests.push_back(request);
 }
 
-class CallbackRequest final : public oclock::ExecuteRequest
-{
-    oclock::BroadcastRequest *org_request_;
-
-public:
-    CallbackRequest(oclock::BroadcastRequest *org_request) : org_request_(org_request) {}
-
-    virtual ~CallbackRequest()
-    {
-        if (org_request_)
-            delete org_request_;
-    }
-
-    void execute()
-    {
-        org_request_->execute();
-        MasterLifecycle::change_to_broadcasting(org_request_);
-        org_request_ = nullptr;
-    }
-};
-
 void oclock::queue(oclock::BroadcastRequest *request)
 {
+    class CallbackRequest final : public oclock::ExecuteRequest
+    {
+        oclock::BroadcastRequest *org_request_;
+
+    public:
+        CallbackRequest(oclock::BroadcastRequest *org_request) : org_request_(org_request) {}
+
+        virtual ~CallbackRequest()
+        {
+            if (org_request_)
+                delete org_request_;
+        }
+
+        void execute()
+        {
+            org_request_->execute();
+            MasterLifecycle::change_to_broadcasting(org_request_);
+            org_request_ = nullptr;
+        }
+    };
+
     queue(new CallbackRequest(request));
 }
 
