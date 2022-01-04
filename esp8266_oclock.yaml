@@ -1,13 +1,16 @@
 esphome:
-  name: oclock
+  name: matrix
   platform: ESP8266
   board: nodemcuv2
-      
+  esp8266_restore_from_flash: true
+
+#debug:
+
 # Enable logging ( and disable for UART )
 logger:
   baud_rate: 0
-  level: INFO
-
+  level: INFO # VERY_VERBOSE #INFO
+  
 # Enable Home Assistant API
 api:
   password: !secret api_password 
@@ -37,6 +40,10 @@ external_components:
 #      path: /Users/birdie/Git/esphome_oclock/components
     refresh: 0min
 
+#demo:
+#  lights:
+#    - name: "DemodB Light"
+#      type: "2"
       
 number:
   - platform: template
@@ -74,6 +81,10 @@ select: # how to include from the code !?
 switch:
   - platform: restart
     name: "Restart Master"
+  - platform: template
+    name: "Template Switch"
+    restore_state: true
+    optimistic: true
 
 oclock:
   count_start: -1 # default is -1
