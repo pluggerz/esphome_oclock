@@ -86,6 +86,10 @@ public:
     DeflatedCmdKey cmd;
     int orderId;
     inline uint8_t speed() const { return cmd.speed(); }
+    inline bool ghost_or_alike() const
+    {
+        return cmd.ghost() || cmd.absolute();
+    }
     HandleCmd() : handleId(-1), cmd(DeflatedCmdKey()), orderId(-1) {}
     HandleCmd(int handleId, DeflatedCmdKey cmd, int orderId) : handleId(handleId), cmd(cmd), orderId(orderId) {}
 };
@@ -333,6 +337,17 @@ public:
             cmd.speed());
     }
 
+    void add(int handle_id, const CmdSpecialMode &mode)
+    {
+        auto cmd = DeflatedCmdKey(CmdEnum::ABSOLUTE, mode, 0);
+        cmds.push_back(HandleCmd(handle_id, cmd, cmds.size()));
+    }
+
+    void follow_seconds(int handle_id, bool discrete)
+    {
+        add(handle_id, discrete ? CmdSpecialMode::FOLLOW_SECONDS_DISCRETE : CmdSpecialMode::FOLLOW_SECONDS);
+    }
+
     /***
      * NOTE: cmd is relative
      */
@@ -391,6 +406,8 @@ class InBetweenAnimations
 {
 public:
     typedef std::function<void(Instructions &instructions, int speed)> Func;
+
+    static void instructDelayUntilAllAreReady(Instructions &instructions, int speed, double additional_time = 0);
 
     static void instructNone(Instructions &instructions, int speed)
     {

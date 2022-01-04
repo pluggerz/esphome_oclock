@@ -45,12 +45,20 @@ namespace oclock
                         for (std::size_t idx = 0; idx < nmbrOfCommands; ++idx)
                         {
                             const auto &cmd = InflatedCmdKey::map(msg[idx]);
-                            const auto ghosting = cmd.ghost();
-                            const auto steps = cmd.steps();
-                            const auto speed = cmdSpeedUtil.deflate_speed(cmd.inflated_speed());
-                            const auto clockwise = cmd.clockwise();
-                            const auto relativePosition = true;
-                            ESP_LOGI(TAG, "Cmd: %s=%3d sp=%d gh=%s cl=%s", ghosting || relativePosition ? "steps" : "   to", steps, speed, YESNO(ghosting), ghosting ? "N/A" : YESNO(clockwise));
+                            if (cmd.extended())
+                            {
+                                const auto extended_cmd = cmd.steps();
+                                ESP_LOGI(TAG, "Cmd: extended_cmd=%d", int(extended_cmd));
+                            }
+                            else
+                            {
+                                const auto ghosting = cmd.ghost();
+                                const auto steps = cmd.steps();
+                                const auto speed = cmdSpeedUtil.deflate_speed(cmd.inflated_speed());
+                                const auto clockwise = cmd.clockwise();
+                                const auto relativePosition = true;
+                                ESP_LOGI(TAG, "Cmd: %s=%3d sp=%d gh=%s cl=%s", ghosting || relativePosition ? "steps" : "   to", steps, speed, YESNO(ghosting), ghosting ? "N/A" : YESNO(clockwise));
+                            }
                         }
                         ESP_LOGI(TAG, "  done");
                     }
@@ -108,14 +116,16 @@ namespace oclock
                 {
                     int goal = static_cast<int>(NUMBER_OF_STEPS * static_cast<double>(hours == 13 ? 7.5 : (double)hours) / 12.0);
                     state.set_ticks(handleId, goal);
-                    // if (hours == 13)
-                    //    state.visibilityFlags.hide(handleId);
+                    if (hours == 13)
+                    {
+                        state.visibilityFlags.hide(handleId);
+                    }
                 };
-                ClockUtil::iterateHandles(chars, lambda);
-                for (int handleId = 0; handleId < MAX_HANDLES; handleId += 2)
+                ClockUtil::iterate_handles(chars, lambda);
+                for (int handleId = 0; handleId < MAX_HANDLES; handleId++)
                 {
-                    //if (state[handleId] == state[handleId + 1])
-                    //    state.nonOverlappingFlags.hide(handleId);
+                    if (state[handleId] == state[handleId + 1])
+                        state.nonOverlappingFlags.hide(handleId);
                 }
                 // state.debug();
             }
@@ -126,7 +136,7 @@ namespace oclock
                 std::set<int> new_speeds_as_set{1};
                 for (const auto &cmd : instructions.cmds)
                 {
-                    if (cmd.ignorable())
+                    if (cmd.ignorable() || cmd.ghost_or_alike())
                         continue;
                     new_speeds_as_set.insert(cmd.speed());
                 }
@@ -153,7 +163,7 @@ namespace oclock
                 cmdSpeedUtil.set_speeds(speeds);
             }
 
-            void sendInstructions(Instructions &instructions)
+            void sendInstructions(Instructions &instructions, u32 millisLeft = u32(-1))
             {
                 updateSpeeds(instructions);
 
@@ -164,13 +174,13 @@ namespace oclock
                 sendCommands(instructions.cmds);
                 instructions.dump();
                 // finalize
-                u16 millisLeft = 1; //(60 - t.seconds) * 1000 + (1000 - t.millis);
                 send(UartEndKeysMessage(
                     instructions.turn_speed,
                     instructions.turn_speed_steps,
                     cmdSpeedUtil.get_speeds(),
                     instructions.get_speed_detection(),
                     millisLeft));
+                ESP_LOGI(TAG, "millisLeft=%ld", long(millisLeft));
             }
 
         public:
@@ -182,6 +192,20 @@ namespace oclock
         };
 
         class SpeedAdaptTestRequest final : public AnimationRequest
+        {
+        public:
+            virtual void finalize() override final
+            {
+                Instructions instructions;
+                auto speed = oclock::master.get_base_speed();
+                instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | RELATIVE, 720, speed));
+                for (int step = 0; step < 30; ++step)
+                    instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | RELATIVE, 24, speed));
+                sendInstructions(instructions);
+            }
+        };
+
+        class SpeedAdaptTestRequest3 final : public AnimationRequest
         {
         public:
             virtual void finalize() override final
@@ -428,8 +452,18 @@ namespace oclock
 
                 HandlesState goal;
                 copyTo(clockChars, goal);
+                bool act_as_second_handle = true;
 
                 Instructions instructions;
+                if (act_as_second_handle)
+                    instructions.iterate_handle_ids(
+                        [&](int handle_id)
+                        {
+                            if (!goal.visibilityFlags[handle_id])
+                                // oke move to 12:00
+                                goal.set_ticks(handle_id, 0);
+                        });
+                
 
                 // final animation
 
@@ -442,7 +476,20 @@ namespace oclock
 
                 selectInBetweenAnimation()(instructions, speed);
                 selectFinalAnimator()(instructions, speed, goal, distanceCalculator);
-                sendInstructions(instructions);
+
+                // lets wait for all... 
+                InBetweenAnimations::instructDelayUntilAllAreReady(instructions, 32);
+                float millis_left = 1000.0f * (60.0f - tracker.now().second) / float(tracker.get_speed_multiplier());
+                ESP_LOGI(TAG, "millis_left: %f", millis_left);
+                if (act_as_second_handle)
+                    instructions.iterate_handle_ids(
+                        [&](int handle_id)
+                        {
+                            if (!goal.visibilityFlags[handle_id])
+                                instructions.follow_seconds(handle_id, true);
+                        });
+
+                sendInstructions(instructions, millis_left);
             }
         };
 
@@ -472,7 +519,23 @@ namespace oclock
             {
                 // just send latests
                 auto mode = oclock::master.get_led_background_mode();
-                send(LedModeRequest(mode));
+                send(LedModeRequest(false, mode));
+            }
+        };
+
+        class ForegroundModeSelectRequest final : public oclock::ExecuteRequest
+        {
+        public:
+            ForegroundModeSelectRequest(int mode)
+            {
+                oclock::master.set_led_foreground_mode(mode);
+            }
+
+            virtual void execute() override final
+            {
+                // just send latests
+                auto mode = oclock::master.get_led_foreground_mode();
+                send(LedModeRequest(true, mode));
             }
         };
 

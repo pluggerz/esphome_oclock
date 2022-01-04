@@ -192,7 +192,7 @@ bool Protocol::update()
         {
 
         case STX: // start of text
-            ESP_LOGD(TAG, "RS485: STX");
+            ESP_LOGD(TAG, "RS485: STX  (E=%ld)", errorCount_);
             haveSTX_ = true;
             haveETX_ = false;
             inputPos_ = 0;
@@ -201,7 +201,7 @@ bool Protocol::update()
             break;
 
         case ETX: // end of text (now expect the CRC check)
-            ESP_LOGD(TAG, "RS485: ETX");
+            ESP_LOGD(TAG, "RS485: ETX  (E=%ld)", errorCount_);
             haveETX_ = true;
             break;
 
@@ -212,7 +212,7 @@ bool Protocol::update()
                 ESP_LOGD(TAG, "ignoring %d (E=%ld)", (int)inByte, errorCount_);
                 break;
             }
-            ESP_LOGD(TAG, "received nibble %d (E=%ld)", (int)inByte, errorCount_);
+            ESP_LOGVV(TAG, "received nibble %d (E=%ld)", (int)inByte, errorCount_);
 
             // check byte is in valid form (4 bits followed by 4 bits complemented)
             if ((inByte >> 4) != ((inByte & 0x0F) ^ 0x0F))
@@ -257,7 +257,7 @@ bool Protocol::update()
             // keep adding if not full
             if (inputPos_ < buffer.size())
             {
-                ESP_LOGD(TAG, "received byte %d (E=%ld)", (int)currentByte_, errorCount_);
+                ESP_LOGVV(TAG, "received byte %d (E=%ld)", (int)currentByte_, errorCount_);
                 buffer.raw()[inputPos_++] = currentByte_;
             }
             else

@@ -1,8 +1,31 @@
 #include "steps_executor.h"
 
+/*
+class SpecialFuncs
+{
+    static void followSeconds(Micros now){
+
+    };
+};
+
+class SpecialExecutor
+{
+public:
+    virtual void loop(Micros now) = 0;
+};
+
+class FollowSecondExecutor : public SpecialExecutor
+{
+    bool discrete;
+    virtual void loop(Micros now)   {
+        
+    }
+} followSecondExecutor;*/
+
 class AnimationKeys
 {
 private:
+    // SpecialFunc *func;
     InflatedCmdKey cmds[MAX_ANIMATION_KEYS] = {};
     uint8_t idx = 0;
 
@@ -40,7 +63,7 @@ public:
     }
 };
 
- uint16_t reverse_steps = 5;
+uint16_t reverse_steps = 5;
 
 template <class S>
 class Animator final
@@ -53,23 +76,33 @@ public:
     uint8_t idx = 0;
     uint8_t turning = 0;
     uint16_t steps = 0;
+    bool special = false;
     bool speed_detection = false;
     bool speed_up = false;
     bool speed_down = false;
+    // follow goal should be factored out...
+    int follow_goal = -1; 
 
     void followSeconds(Micros now, bool discrete)
     {
-        Millis delta = now / 1000 - t0;
-        if (delta > millisLeft)
-            delta = millisLeft;
-        double fraction = (double)delta / (double)millisLeft;
-        int goal;
-        if (discrete)
-            goal = Ticks::normalize((double)NUMBER_OF_STEPS * ceil(60.0 * fraction) / 60.0);
-        else
-            goal = Ticks::normalize((double)NUMBER_OF_STEPS * fraction);
-        int current = stepperPtr->ticks();
-        if (goal != current)
+        const auto current = stepperPtr->ticks();
+        if (follow_goal < 0 || current == follow_goal)
+        {
+            Millis delta = now / 1000 - t0;
+            if (delta > millisLeft)
+            {
+                follow_goal = 0;
+            }
+            else
+            {
+                double fraction = (double)delta / (double)millisLeft;
+                if (discrete)
+                    follow_goal = Ticks::normalize((double)NUMBER_OF_STEPS * ceil(60.0 * fraction) / 60.0);
+                else
+                    follow_goal = Ticks::normalize((double)NUMBER_OF_STEPS * fraction);
+            }
+        }
+        if (follow_goal != current)
             stepperPtr->tryToStep(now);
     }
 
@@ -88,14 +121,14 @@ public:
         const auto &cur = keys[idx];
         const auto cur_speed = cmdSpeedUtil.deflate_speed(cur.inflated_speed());
 
-        if (cur.ghost())
+        if (cur.ghost_or_alike())
             // the stepper is 'not stepping'
             return false;
         if (idx == 0)
             // first command
             return fast_enough(cur_speed);
         const auto &prev = keys[idx - 1];
-        if (prev.ghost())
+        if (prev.ghost_or_alike())
             // threat as first command
             return fast_enough(cur_speed);
         if (prev.clockwise() == cur.clockwise())
@@ -112,7 +145,7 @@ public:
         const auto &keys = *keysPtr;
         const auto &cur = keys[idx];
         const auto cur_speed = cmdSpeedUtil.deflate_speed(cur.inflated_speed());
-        if (cur.ghost())
+        if (cur.ghost_or_alike())
             // the stepper is 'not stepping'
             return false;
 
@@ -122,7 +155,7 @@ public:
             return fast_enough(cur_speed);
         }
         const auto &nxt = keys[idx + 1];
-        if (nxt.empty() || nxt.ghost())
+        if (nxt.empty() || nxt.ghost_or_alike())
             // last command, or next is still... lets check if we need to step down...
             return fast_enough(cur_speed);
         if (cur.clockwise() == nxt.clockwise())
@@ -139,29 +172,35 @@ public:
             return;
         }
 
-        auto &keys = *keysPtr;
         auto &stepper = *stepperPtr;
         if (steps > 0)
         {
-            switch (steps)
+            if (special)
             {
-            case STEP_MULTIPLIER *CmdSpecialMode::FOLLOW_SECONDS_DISCRETE:
-                followSeconds(now, true);
-                return;
+                switch (steps)
+                {
+                case CmdSpecialMode::FOLLOW_SECONDS_DISCRETE:
+                    followSeconds(now, true);
+                    return;
 
-            case STEP_MULTIPLIER *CmdSpecialMode::FOLLOW_SECONDS:
-                followSeconds(now, false);
-                return;
-            };
-
-            // still to do some work
-            if (stepper.tryToStep(now))
+                case CmdSpecialMode::FOLLOW_SECONDS:
+                    followSeconds(now, false);
+                    return;
+                };
+            }
+            else
             {
-                steps--;
+
+                // still to do some work
+                if (stepper.tryToStep(now))
+                {
+                    steps--;
+                }
             }
             return;
         }
 
+        auto &keys = *keysPtr;
         stepper.disable_defecting();
         if (idx == keys.size())
         {
@@ -172,9 +211,11 @@ public:
         const InflatedCmdKey &cmd = keys[idx];
         if (cmd.empty())
         {
+            // nothing to do
+            keysPtr = nullptr;
             return;
         }
-        const auto speed = cmdSpeedUtil.deflate_speed(cmd.inflated_speed());
+        const auto speed = cmd.extended() ? 4 : cmdSpeedUtil.deflate_speed(cmd.inflated_speed());
         const auto clockwise = cmd.clockwise();
         if (turning == 0)
         {
@@ -210,13 +251,25 @@ public:
             // just execute
             const auto ghosting = cmd.ghost();
             stepper.setGhosting(ghosting);
-            steps = cmd.steps() * STEP_MULTIPLIER;
-            if (ghosting)
+            special = cmd.extended();
+            if (special)
             {
-                // we are standing 'still' so presume more speed
-                stepper.set_current_speed_in_revs_per_minute(clockwise ? speed : -speed);
+                steps = cmd.steps();
+                follow_goal = -1;
+                // should be adapted for the cases
+                stepper.set_current_speed_in_revs_per_minute(8);
+                stepper.set_speed_in_revs_per_minute(8);
             }
-            stepper.set_speed_in_revs_per_minute(clockwise ? speed : -speed);
+            else
+            {
+                steps = cmd.steps() * STEP_MULTIPLIER;
+                if (ghosting)
+                {
+                    // we are standing 'still' so presume more speed
+                    stepper.set_current_speed_in_revs_per_minute(clockwise ? speed : -speed);
+                }
+                stepper.set_speed_in_revs_per_minute(clockwise ? speed : -speed);
+            }
             return;
         }
         if (turning == 1)
@@ -242,18 +295,19 @@ public:
         keysPtr = nullptr;
     }
 
-    void start(AnimationKeys *keys, u16 millisLeft, bool speed_detection)
+    void start(AnimationKeys *keys, Millis millisLeft, bool speed_detection)
     {
         this->keysPtr = keys;
-        this->t0 = millis();
+        this->t0 = ::millis();
         this->millisLeft = millisLeft;
         this->idx = 0;
+        this->special = false;
         this->steps = 0;
         this->turning = 0;
         this->speed_down = 0;
         this->speed_up = false;
-
         this->speed_detection = speed_detection;
+
         stepperPtr->sync();
     }
 };
@@ -302,8 +356,8 @@ void StepExecutors::process_end_keys(int slave_id, const UartEndKeysMessage *msg
     bool speed_detection0 = msg->speed_detection & (1 << uint64_t(slave_id + 0));
     bool speed_detection1 = msg->speed_detection & (1 << uint64_t(slave_id + 1));
 
-    animator0.start(&animationKeysArray[0], 1, speed_detection0);
-    animator1.start(&animationKeysArray[1], 1, speed_detection1);
+    animator0.start(&animationKeysArray[0], msg->number_of_millis_left, speed_detection0);
+    animator1.start(&animationKeysArray[1], msg->number_of_millis_left, speed_detection1);
 }
 
 void StepExecutors::process_add_keys(const UartKeysMessage *msg)

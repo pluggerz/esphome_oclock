@@ -82,6 +82,7 @@ public:
 
     void stop()
     {
+        StepExecutors::reset();
     }
 
     void setup(Micros now)

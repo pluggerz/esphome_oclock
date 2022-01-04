@@ -2,6 +2,7 @@
 #include "master.h"
 #include "requests.h"
 
+#include "esphome/core/preferences.h"
 #include "esphome/components/output/float_output.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/output/float_output.h"
@@ -36,19 +37,8 @@ namespace oclock
             this->set_name(name);
             this->set_disabled_by_default(false);
             this->set_optimistic(true);
-            this->set_assumed_state(false);
+            this->set_assumed_state(true);
             this->set_restore_state(true);
-        }
-    };
-
-    class DebugLedLayerSwitch : public AbstractSwitch
-    {
-    public:
-        DebugLedLayerSwitch() : AbstractSwitch("Debug Led Layer") {}
-
-        virtual void change(bool state) override
-        {
-            oclock::queue_message(UartBoolMessage(MSG_BOOL_DEBUG_LED_LAYER, state));
         }
     };
 
@@ -106,11 +96,34 @@ namespace oclock
         }
     };
 
+    class ForegroundModeSelect : public AbstractSelect<int>
+    {
+    public:
+        ForegroundModeSelect()
+        {
+            modes["None"] = 0;
+            modes["Debug Leds"] = 1;
+            modes["Follow Handles"] = 2;
+            
+            init();
+
+            this->set_initial_option("None");
+            this->set_name("Foreground Led Animation");
+        }
+
+        virtual void execute_state_change(const int &value) override
+        {
+            oclock::queue(new requests::ForegroundModeSelectRequest(value));
+        }
+    };
+
     class BackgroundModeSelect : public AbstractSelect<int>
     {
     public:
         BackgroundModeSelect()
         {
+            icon_="mdi:wallpaper";
+
             modes["Solid Color"] = 0;
             modes["Warm White Shimmer"] = 1;
             modes["Random Color Walk"] = 2;
@@ -230,6 +243,8 @@ namespace oclock
     public:
         HandlesInBetweenAnimationModeSelect()
         {
+            icon_ ="mdi:movie-open-outline";
+            
             modes["Random"] = InBetweenAnimationEnum::Random;
             modes["None"] = InBetweenAnimationEnum::None;
             modes["Star"] = InBetweenAnimationEnum::Star;
@@ -255,6 +270,8 @@ namespace oclock
     public:
         HandlesDistanceModeSelect()
         {
+            icon_ ="mdi:map-marker-distance";
+
             modes["Random"] = HandlesDistanceEnum::Random;
             modes["Left"] = HandlesDistanceEnum::Left;
             modes["Right"] = HandlesDistanceEnum::Right;
@@ -317,9 +334,11 @@ namespace oclock
     {
         virtual void follow_state() = 0;
 
+
         virtual void update() override
         {
             TemplateNumber::update();
+            ESP_LOGI(TAG, "NumberControl<%s>::update %d", name_.c_str(), int(state));
             follow_state();
         }
 
@@ -327,6 +346,7 @@ namespace oclock
         {
             auto rounded_value = int(value);
             TemplateNumber::control(rounded_value);
+            ESP_LOGI(TAG, "NumberControl<%s>::control %d", name_.c_str(), int(state));
             follow_state();
         }
 
@@ -354,6 +374,8 @@ namespace oclock
 
         SpeedControl()
         {
+            this->icon_="mdi:speedometer";
+
             this->set_name("Speed");
             this->set_initial_value(12);
             this->traits.set_min_value(1.0f);
@@ -373,6 +395,8 @@ namespace oclock
 
         TurnSpeedControl()
         {
+            this->icon_ = "mdi:arrow-u-down-left-bold";
+
             this->set_name("Turn Speed");
             this->set_initial_value(8);
             this->traits.set_min_value(1.0f);
@@ -514,6 +538,16 @@ namespace oclock
         {
             publish_state(false);
             oclock::queue(new requests::SpeedTestRequest64());
+        }
+    };
+
+    class SavePreferencesSwitch : public esphome::switch_::Switch
+    {
+    public:
+        virtual void write_state(bool state) override
+        {
+            publish_state(false);
+            global_preferences->sync();
         }
     };
 

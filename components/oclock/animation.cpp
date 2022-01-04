@@ -112,7 +112,7 @@ void instructUsingSwipeWithBase(Instructions &instructions, int speed, const Han
         // wait
         int steps = steps_calculator(from, base_tick);
         int ghost_steps = max_steps_from - abs(steps);
-        ESP_LOGD(TAG, "instructUsingSwipeWithBase: handle_id=%d max_steps=%d steps=%d ghost_steps=%d", handle_id, max_steps, steps, ghost_steps);
+        ESP_LOGD(TAG, "instructUsingSwipeWithBase: handle_id=%d steps=%d ghost_steps=%d", handle_id, steps, ghost_steps);
         instructions.add(handle_id, DeflatedCmdKey(CmdEnum::GHOST, ghost_steps, speed));
 
         // go to base_tick
@@ -198,7 +198,7 @@ int steps_needed_for_given_time_and_speed(double time, int speed)
     return time * double(speed * NUMBER_OF_STEPS) / 60.0d;
 };
 
-void instructDelayUntilAllAreReady(Instructions &instructions, int speed, double additional_time = 0)
+void InBetweenAnimations::instructDelayUntilAllAreReady(Instructions &instructions, int speed, double additional_time)
 {
     double max_time = -1;
     for (int handle_id = 0; handle_id < MAX_HANDLES; ++handle_id)
@@ -417,10 +417,10 @@ void HandlesAnimations::instruct_using_swipe(Instructions &instructions, int spe
                 break;
             }
         }
-        ESP_LOGD(TAG, "For swipe: base_tick=%d -> max_steps=%d", base_tick, max_steps);
+        ESP_LOGVV(TAG, "For swipe: base_tick=%d -> max_steps=%d", base_tick, max_steps);
         if (max_steps < optimal_steps)
         {
-            ESP_LOGD(TAG, "For swipe: new optimal: base_tick=%d -> max_steps=%d", base_tick, max_steps);
+            ESP_LOGVV(TAG, "For swipe: new optimal: base_tick=%d -> max_steps=%d", base_tick, max_steps);
             optimal_steps = max_steps;
             optimal_base_tick = base_tick;
         }

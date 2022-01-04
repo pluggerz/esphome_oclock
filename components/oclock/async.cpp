@@ -44,10 +44,9 @@ void plot() {
 void AsyncRegister::add(const char* id, Async* async) {
   if (id != nullptr) {
     AsyncEntry** it = list;
-    AsyncEntry* asyncEntry;
-
+    
     for (unsigned int idx = 0; idx < listSize; ++idx, ++it) {
-      asyncEntry = *it;
+      auto asyncEntry = *it;
       if (asyncEntry == nullptr) {
         continue;
       }

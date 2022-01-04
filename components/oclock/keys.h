@@ -33,12 +33,17 @@ union InflatedCmdKey
         // first 3 bits for mode
         uint16_t ghost : 1,
             clockwise : 1,
-            absolute : 1,
+            extended : 1,
             // next 3 bits for speed
             steps : 10,
             speed : 3;
         // which concludes: (1+1+1) + 3 + 10 = 16 bits
     } value;
+    struct
+    {
+        uint16_t : 2,
+            extended : 1, : 13;
+    } extended_value;
     uint16_t raw;
     uint16_t mode_ : MODE_WIDTH;
     // uint32_t base_ : MODE_WIDTH + STEPS_WIDTH;
@@ -48,11 +53,19 @@ union InflatedCmdKey
         raw = 0;
     }
 
-    void dump(const char* extra) const
+#ifdef ESP8266
+    void dump(const char *extra) const
     {
-        ESP_LOGE(TAG, "%s: gh=%s cl=%s, ab=%s, steps=%d", extra, YESNO(ghost()), YESNO(clockwise()), YESNO(absolute()), steps());
+        if (extended())
+        {
+            ESP_LOGE(TAG, "%s: ex=%s", extra, YESNO(extended()));
+        }
+        else
+        {
+            ESP_LOGE(TAG, "%s: gh=%s cl=%s, ex=%s, steps=%d", extra, YESNO(ghost()), YESNO(clockwise()), YESNO(extended()), steps());
+        }
     }
-
+#endif
 
     static const InflatedCmdKey &map(const uint16_t &raw)
     {
@@ -65,14 +78,19 @@ union InflatedCmdKey
         return value.clockwise;
     }
 
-    bool absolute() const
+    bool extended() const
     {
-        return value.absolute;
+        return value.extended;
     }
 
     inline bool ghost() const
     {
         return value.ghost;
+    }
+
+    inline bool ghost_or_alike() const
+    {
+        return value.ghost || value.extended;
     }
 
     inline int inflated_speed() const
@@ -93,8 +111,8 @@ union InflatedCmdKey
 
 enum CmdSpecialMode
 {
-    FOLLOW_SECONDS_DISCRETE = ((1 << STEPS_WIDTH) - 1),
-    FOLLOW_SECONDS = ((1 << STEPS_WIDTH) - 2)
+    FOLLOW_SECONDS_DISCRETE = 1,
+    FOLLOW_SECONDS = 2
 };
 
 class CmdSpeedUtil
@@ -127,7 +145,7 @@ public:
     {
         if ((value & SPEED_MASK) != value)
         {
-            ESP_LOGE(TAG, "Invalid inflated speed!? speed=%d", value);
+            ESP_LOGE(TAG, "Invalid!? inflated_speed=%d", value);
             return speeds[0];
         }
         return speeds[value];
@@ -163,14 +181,17 @@ public:
         InflatedCmdKey ret;
         ret.mode_ = mode_;
         ret.value.steps = fatKey.steps;
-        ret.value.speed = cmdSpeedUtil.inflate_speed(fatKey.speed);
+        if (!extended())
+            ret.value.speed = cmdSpeedUtil.inflate_speed(fatKey.speed);
         return ret;
     }
 
-    void dump(const char* extra) const
+#ifdef ESP8266
+    void dump(const char *extra) const
     {
         ESP_LOGE(TAG, "%s: gh=%s cl=%s, ab=%s, steps=%d, sp=%d raw=%d", extra, YESNO(ghost()), YESNO(clockwise()), YESNO(absolute()), steps(), speed(), (int)raw);
     }
+#endif
 
     DeflatedCmdKey()
     {
@@ -195,6 +216,11 @@ public:
     }
 
     inline bool absolute() const
+    {
+        return fatKey.absolute;
+    }
+
+    inline bool extended() const
     {
         return fatKey.absolute;
     }

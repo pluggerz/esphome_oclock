@@ -103,8 +103,9 @@ public:
 struct LedModeRequest : public UartMessage
 {
 public:
+  bool foreground;
   uint8_t mode;
-  LedModeRequest(uint8_t mode) : UartMessage(-1, MSG_LED_MODE), mode(mode) {}
+  LedModeRequest(bool foreground, uint8_t mode) : UartMessage(-1, MSG_LED_MODE), foreground(foreground), mode(mode) {}
 } __attribute__((packed, aligned(1)));
 
 struct UartLogMessage : public UartMessage

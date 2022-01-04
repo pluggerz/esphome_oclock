@@ -5,7 +5,7 @@
 
 template <uint16_t SIZE>
 class RingBuffer
-{ 
+{
     volatile uint16_t writeIndex, readIndex, bufferLength;
     volatile bool overflow_{false};
     char buffer[SIZE];
@@ -14,7 +14,7 @@ public:
     void reset()
     {
         writeIndex = readIndex = bufferLength = 0;
-        overflow_=false;
+        overflow_ = false;
     }
 
     RingBuffer() { reset(); }
@@ -43,7 +43,7 @@ public:
         bufferLength--; //	Decrease buffer size after reading
         char ret = buffer[readIndex];
         readIndex++; //	Increase readIndex position to prepare for next read
-        overflow_=false;
+        overflow_ = false;
 
         // If at last index in buffer, set readIndex back to 0
         if (readIndex == SIZE)
@@ -105,8 +105,8 @@ public:
 
 class SlaveLogger : public LogExtractor
 {
-#define LOG_TMP_BUFFER_SIZE 58
     RingBuffer<250> buffer;
+#define LOG_TMP_BUFFER_SIZE 58
     char output_buffer[LOG_TMP_BUFFER_SIZE];
     bool enabled{true};
 

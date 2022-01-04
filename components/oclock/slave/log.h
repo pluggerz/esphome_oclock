@@ -62,7 +62,9 @@ HOT void esp_log_printf_(int level, const void *tag, int line, const __FlashStri
 #endif
 
 #define esph_log_d(tag, format, ...)
+#define esph_log_vv(tag, format, ...)
 #define esph_log_config(tag, format, ...)
+
 
 #define ESP_LOGE(tag, ...) esph_log_e(tag, __VA_ARGS__)
 #define LOG_E(tag, ...) ESP_LOGE(tag, __VA__ARGS__)

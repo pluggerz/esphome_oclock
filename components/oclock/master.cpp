@@ -276,15 +276,18 @@ void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
             return true;
 
         case MsgType::MSG_POS_REQUEST:
-            ESP_LOGI(TAG, "Store pos request! %d %d", msg->getSourceId(), slaveIdCounter);
+        {
+            auto pos_msg = reinterpret_cast<const UartPosRequest *>(msg);
+            ESP_LOGI(TAG, "Store pos request! %d %d (%d, %d)", msg->getSourceId(), slaveIdCounter, pos_msg->pos0, pos_msg->pos1);
             animationController.set_handles(msg->getSourceId(),
-                                            reinterpret_cast<const UartPosRequest *>(msg)->pos0,
-                                            reinterpret_cast<const UartPosRequest *>(msg)->pos1);
+                                            pos_msg->pos0,
+                                            pos_msg->pos1);
             if (msg->getDstId() == 0xFF)
             {
                 ESP_LOGI(TAG, "Done retrieving pos request!");
                 FINAL_REQUEST()
             }
+        }
             return true;
 
         default:

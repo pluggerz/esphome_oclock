@@ -1,5 +1,6 @@
 #pragma once
 
+#include "oclock.h"
 #include "ticks.h"
 #include "interop.h"
 #include "keys.h"
@@ -24,7 +25,7 @@ public:
         return _size;
     }
 
-    uint16_t &operator[](int idx)
+    const uint16_t &operator[](int idx) const 
     {
         return cmds[idx];
     }
@@ -41,20 +42,18 @@ public:
 struct UartEndKeysMessage : public UartMessage
 {
 public:
-    uint16_t numberOfMillisLeft;
+    uint32_t number_of_millis_left;
     uint8_t turn_speed, turn_speed_steps;
     uint8_t speed_map[8];
     uint64_t speed_detection;
 
-    UartEndKeysMessage(const uint8_t turn_speed, const uint8_t turn_speed_steps, const uint8_t (&speed_map)[8], uint64_t _speed_detection, uint16_t numberOfMillisLeft)
+    UartEndKeysMessage(const uint8_t turn_speed, const uint8_t turn_speed_steps, const uint8_t (&speed_map)[8], uint64_t _speed_detection, uint32_t number_of_millis_left)
         : UartMessage(-1, MSG_END_KEYS, ALL_SLAVES),
-          numberOfMillisLeft(numberOfMillisLeft),
+          number_of_millis_left(number_of_millis_left),
           turn_speed(turn_speed),
           turn_speed_steps(turn_speed_steps),
           speed_detection(_speed_detection)
     {
-        ESP_LOGE(TAG, "SPD: %llu", speed_detection);
-
         for (int idx = 0; idx < 8; ++idx)
         {
             this->speed_map[idx] = speed_map[idx];

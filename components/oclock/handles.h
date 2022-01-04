@@ -163,7 +163,7 @@ public:
         fillHandle(dstHandles, 18, srcChars[3]);
     }
 
-    static void iterateClocks(ClockCharacters srcChars, std::function<void(int clockId, int handle0, int handle1)> func)
+    static void iterate_clocks(const ClockCharacters &srcChars, std::function<void(int clockId, int handle0, int handle1)> func)
     {
         iterateClocks(0, srcChars[0], func);
         iterateClocks(6, srcChars[1], func);
@@ -171,7 +171,7 @@ public:
         iterateClocks(18, srcChars[3], func);
     }
 
-    static void iterateHandles(ClockCharacters srcChars, std::function<void(int, int)> func)
+    static void iterate_handles(const ClockCharacters &srcChars, std::function<void(int, int)> func)
     {
         std::function<void(int, int, int)> innerFunc = [&func](int clockId, int shortHandle, int longHandle)
         {
@@ -179,6 +179,6 @@ public:
             func(handleId, shortHandle);
             func(handleId + 1, longHandle);
         };
-        iterateClocks(srcChars, innerFunc);
+        iterate_clocks(srcChars, innerFunc);
     }
 };

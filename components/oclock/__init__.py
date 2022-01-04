@@ -200,13 +200,14 @@ async def to_code(config):
     await cg_add_switch("oclock_speed_check064", cg.RawExpression("new oclock::SpeedCheckSwitch64()"))
     await cg_add_switch("oclock_speed_adapt", cg.RawExpression("new oclock::SpeedAdaptTestSwitch()"))
 
+    await cg_add_switch("oclock_save", cg.RawExpression("new oclock::SavePreferencesSwitch()"))
+    
     await cg_add_switch("oclock_reset", cg.RawExpression("new oclock::ResetSwitch()"))
     await cg_add_switch("oclock_request_positions", cg.RawExpression("new oclock::RequestPositions()"))
     await cg_add_switch("oclock_dump_logs", cg.RawExpression("new oclock::DumpLogsSwitch()"))
     await cg_add_switch("oclock_dump_config", cg.RawExpression("new oclock::DumpConfigSwitch()"))
     await cg_add_switch("oclock_dump_config_slaves", cg.RawExpression("new oclock::DumpConfigSlavesSwitch()"))
 
-    cg.add(cg.RawExpression("new oclock::DebugLedLayerSwitch();"));
     cg.add(cg.RawExpression("new oclock::TurnSpeedControl();"));
     cg.add(cg.RawExpression("new oclock::TurnStepsControl();"));
     cg.add(cg.RawExpression("new oclock::ActiveModeSelect();"));
@@ -214,6 +215,7 @@ async def to_code(config):
     cg.add(cg.RawExpression("new oclock::TestHourControl();"));
     cg.add(cg.RawExpression("new oclock::SpeedControl();"));
     cg.add(cg.RawExpression("new oclock::BackgroundModeSelect();"));
+    cg.add(cg.RawExpression("new oclock::ForegroundModeSelect();"));
     cg.add(cg.RawExpression("new oclock::HandlesInBetweenAnimationModeSelect();"));
     cg.add(cg.RawExpression("new oclock::HandlesDistanceModeSelect();"));
     cg.add(cg.RawExpression("new oclock::HandlesAnimationModeSelect();"));

@@ -3,6 +3,8 @@
 
 
 ForegroundLayer& debugLedLayer();
+ForegroundLayer& followHandlesLayer();
+
 
 class HighlightLedLayer : public ForegroundLayer
 {
@@ -31,7 +33,7 @@ protected:
         {
             auto &r = result[idx];
             auto relativeBrightness = static_cast<double>(ledAlphas[idx]) / static_cast<double>(MAX_BRIGHTNESS) * brightness;
-            // r.alpha = relativeBrightness;
+            r.alpha = relativeBrightness;
 
             // Hal::yield();
         }
@@ -96,11 +98,5 @@ class FollowHandlesLedLayer : public HighlightLedLayer
         fillLeds(shortHandlePos);
         //Hal::yield();
         return true;
-    }
-
-public:
-    void start() override
-    {
-        LedLayer::start();
     }
 };

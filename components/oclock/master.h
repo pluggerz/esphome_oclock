@@ -53,6 +53,7 @@ namespace oclock
     {
         SlaveConfig slaves_[24];
         int background_led_mode_{0};
+        int foreground_led_mode_{0};
         int brightness_{0};
         int base_speed{12};
         ActiveMode active_mode{ActiveMode::None};
@@ -72,6 +73,9 @@ namespace oclock
 
         int get_base_speed() const { return base_speed; }
         void set_base_speed(int value) { base_speed = value; }
+
+        int get_led_foreground_mode() const { return foreground_led_mode_; }
+        void set_led_foreground_mode(int value) { foreground_led_mode_ = value; }
 
         int get_led_background_mode() const { return background_led_mode_; }
         void set_led_background_mode(int value) { background_led_mode_ = value; }

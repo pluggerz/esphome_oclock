@@ -1,6 +1,8 @@
 #include "leds.h"
 #include "stepper.h"
 
+#include "leds_foreground.h"
+
 // Create an object for writing to the LED strip.
 APA102<LED_DATA_PIN, LED_CLOCK_PIN> ledStrip;
 
@@ -87,8 +89,13 @@ private:
 };
 
 DebugLayer debugLedLayer_;
+FollowHandlesLedLayer followHandlesLayer_;
 
 ForegroundLayer &debugLedLayer()
 {
     return debugLedLayer_;
+}
+
+ForegroundLayer &followHandlesLayer()   {
+    return followHandlesLayer_;
 }

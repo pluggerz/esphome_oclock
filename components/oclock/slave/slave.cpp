@@ -263,6 +263,13 @@ void change_to_init()
 
         case MsgType::MSG_ID_DONE:
         {
+            // wait until premains are done
+            while (preMain0.busy() || preMain1.busy())
+            {
+                auto now = ::micros();
+                preMain0.loop(now);
+                preMain1.loop(now);
+            }
             Sync::write(LOW);
             auto doneMsg = reinterpret_cast<const UartDoneMessage *>(msg);
             if (doneMsg->assignedId == nextSlaveId)
@@ -325,7 +332,7 @@ void do_position_request(const UartMessage *msg)
     uart.start_receiving();
 }
 
-void do_led_mode_request(const LedModeRequest *msg)
+void do_led_background_mode_request(const LedModeRequest *msg)
 {
     const auto &mode = msg->mode;
 
@@ -357,6 +364,36 @@ void do_led_mode_request(const LedModeRequest *msg)
     default:
         break;
     }
+}
+
+void do_led_foreground_mode_request(const LedModeRequest *msg)
+{
+    switch (msg->mode)
+    {
+    case 1:
+        ESP_LOGI(TAG, "fg.leds.debugLedLayer");
+        ledAsync.set_foreground_led_layer(&debugLedLayer());
+        return;
+
+    case 2:
+        ESP_LOGI(TAG, "fg.leds.followHandlesLayer");
+        ledAsync.set_foreground_led_layer(&followHandlesLayer());
+        return;
+
+    case 0:
+    default:
+        ESP_LOGI(TAG, "fg.leds.nullptr");
+        ledAsync.set_foreground_led_layer(nullptr);
+        return;
+    }
+}
+
+void do_led_mode_request(const LedModeRequest *msg)
+{
+    if (msg->foreground)
+        do_led_foreground_mode_request(msg);
+    else
+        do_led_background_mode_request(msg);
 }
 
 void do_color_request(const UartColorMessage *msg)
@@ -427,21 +464,14 @@ void changeToMainTask()
     uart.start_receiving();
 }
 
-uint8_t count = 0;
-
 void loop()
 {
     Micros now = micros();
     preMain0.loop(now);
     preMain1.loop(now);
 
-    if (count++ == 64)
-    {
-        // this way the motors will be able to use speed 64
-        uart.loop();
-        internalResetChecker.loop(now);
-        ledAsync.loop(now);
-
-        count = 0;
-    }
+    // this way the motors will be able to use speed 64
+    uart.loop();
+    internalResetChecker.loop(now);
+    ledAsync.loop(now);
 }
