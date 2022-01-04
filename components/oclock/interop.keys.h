@@ -25,6 +25,11 @@ public:
         return _size;
     }
 
+    uint16_t &operator[](int idx) 
+    {
+        return cmds[idx];
+    }
+
     const uint16_t &operator[](int idx) const 
     {
         return cmds[idx];
