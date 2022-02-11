@@ -379,10 +379,25 @@ namespace oclock
         class ZeroPosition final : public AnimationRequest 
         {
             public:
-                        virtual void finalize() override final
+            virtual void finalize() override final
             {
                 HandlesState goal;
                 goal.setAll(0, 0);
+
+                Instructions instructions;
+
+                sendInstructions(instructions, 1);
+            }
+
+        };
+
+        class SixPosition final : public AnimationRequest 
+        {
+            public:
+            virtual void finalize() override final
+            {
+                HandlesState goal;
+                goal.setAll(NUMBER_OF_STEPS/2, NUMBER_OF_STEPS/2);
 
                 Instructions instructions;
 

@@ -500,6 +500,19 @@ namespace oclock
         }
     };
 
+        class ZeroPositionSwitch : public esphome::switch_::Switch    {
+        public:
+        virtual void write_state(bool state) override
+        {
+            publish_state(false);
+            oclock::queue(new requests::ZeroPosition());
+            AsyncRegister::byName("time_tracker", nullptr);
+        }
+    
+    };
+
+
+
     class TrackTestTime : public esphome::switch_::Switch
     {
     public:
