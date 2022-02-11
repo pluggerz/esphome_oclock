@@ -107,6 +107,13 @@ void MasterLifecycle::change_to_init()
 
     // all slaves will stop their work and put Sync to low
     uart.send(UartMessage(-1, MsgType::MSG_ID_RESET));
+    while (Sync::read() == HIGH)
+        {
+            // wait while slave is high
+            ::delay(200);
+            ESP_LOGI(TAG, "Waiting until slaves put sync LOW...");
+        }
+    ESP_LOGI(TAG, "Sync is LOW...");
 
     // make sure we are high
     Sync::write(HIGH);
