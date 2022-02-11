@@ -361,8 +361,8 @@ public:
 
 #include "pins.h"
 
-typedef Stepper<MOTOR_A_STEP, MOTOR_A_DIR, SLAVE_POS_B> Stepper0;
-typedef Stepper<MOTOR_B_STEP, MOTOR_B_DIR, SLAVE_POS_A> Stepper1;
+typedef Stepper<MOTOR_A_STEP, MOTOR_A_DIR, SLAVE_POS_A> Stepper0;
+typedef Stepper<MOTOR_B_STEP, MOTOR_B_DIR, SLAVE_POS_B> Stepper1;
 
 extern Stepper0 stepper0;
 extern Stepper1 stepper1;

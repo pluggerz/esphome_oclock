@@ -376,6 +376,27 @@ namespace oclock
             };
         };
 
+        class ZeroPosition final : public AnimationRequest 
+        {
+            public:
+                        virtual void finalize() override final
+            {
+                HandlesState goal;
+                goal.setAll(0, 0);
+                
+                Instructions instructions;
+
+                sendInstructions(instructions, millis_left);
+                auto distanceCalculator = clockwise;
+                auto finalAnimator = instruct_using_swipe;
+
+                auto speed = tracker.get_speed_multiplier() * oclock::master.get_base_speed();
+
+                finalAnimator(instructions, speed, goal, distanceCalculator);
+            }
+
+        };
+
         class TrackTimeRequest final : public AnimationRequest
         {
             const oclock::time_tracker::TimeTracker &tracker;
