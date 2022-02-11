@@ -386,7 +386,7 @@ namespace oclock
 
                 Instructions instructions;
 
-                sendInstructions(instructions, 1;
+                sendInstructions(instructions, 1);
             }
 
         };
