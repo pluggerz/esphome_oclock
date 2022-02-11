@@ -203,8 +203,8 @@ async def to_code(config):
     await cg_add_switch("oclock_save", cg.RawExpression("new oclock::SavePreferencesSwitch()"))
     
     await cg_add_switch("oclock_reset", cg.RawExpression("new oclock::ResetSwitch()"))
-    await cg_add_switch("oclock_0_positon", cg.RawExpression("new oclock::ZeroPositionSwitch()"))
     await cg_add_switch("oclock_6_positon", cg.RawExpression("new oclock::SixPositionSwitch()"))
+    await cg_add_switch("oclock_0_positon", cg.RawExpression("new oclock::ZeroPositionSwitch()"))
     await cg_add_switch("oclock_request_positions", cg.RawExpression("new oclock::RequestPositions()"))
     await cg_add_switch("oclock_dump_logs", cg.RawExpression("new oclock::DumpLogsSwitch()"))
     await cg_add_switch("oclock_dump_config", cg.RawExpression("new oclock::DumpConfigSwitch()"))

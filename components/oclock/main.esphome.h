@@ -500,7 +500,7 @@ namespace oclock
         }
     };
 
-        class ZeroPositionSwitch : public esphome::switch_::Switch    {
+    class ZeroPositionSwitch : public esphome::switch_::Switch    {
         public:
         virtual void write_state(bool state) override
         {
@@ -508,7 +508,16 @@ namespace oclock
             oclock::queue(new requests::ZeroPosition());
             AsyncRegister::byName("time_tracker", nullptr);
         }
-    
+    };
+
+    class SixPositionSwitch : public esphome::switch_::Switch    {
+        public:
+        virtual void write_state(bool state) override
+        {
+            publish_state(false);
+            oclock::queue(new requests::SixPosition());
+            AsyncRegister::byName("time_tracker", nullptr);
+        }
     };
 
 
