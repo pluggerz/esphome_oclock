@@ -383,16 +383,10 @@ namespace oclock
             {
                 HandlesState goal;
                 goal.setAll(0, 0);
-                
+
                 Instructions instructions;
 
-                sendInstructions(instructions, millis_left);
-                auto distanceCalculator = clockwise;
-                auto finalAnimator = instruct_using_swipe;
-
-                auto speed = tracker.get_speed_multiplier() * oclock::master.get_base_speed();
-
-                finalAnimator(instructions, speed, goal, distanceCalculator);
+                sendInstructions(instructions, 1;
             }
 
         };
