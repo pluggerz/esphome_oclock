@@ -378,28 +378,18 @@ namespace oclock
 
         class ZeroPosition final : public AnimationRequest 
         {
+            const int position;
             public:
+            ZeroPosition(int positon) : position(positon) {}
             virtual void finalize() override final
             {
                 HandlesState goal;
-                goal.setAll(0, 0);
+                goal.setAll(position, position);
 
                 Instructions instructions;
-
-                sendInstructions(instructions, 1);
-            }
-
-        };
-
-        class SixPosition final : public AnimationRequest 
-        {
-            public:
-            virtual void finalize() override final
-            {
-                HandlesState goal;
-                goal.setAll(NUMBER_OF_STEPS/2, NUMBER_OF_STEPS/2);
-
-                Instructions instructions;
+                auto speed = oclock::master.get_base_speed();
+                auto distanceCalculator=DistanceCalculators::clockwise;
+                HandlesAnimations::instruct_using_swipe(instructions, speed, goal, distanceCalculator);
 
                 sendInstructions(instructions, 1);
             }
