@@ -505,7 +505,7 @@ namespace oclock
         virtual void write_state(bool state) override
         {
             publish_state(false);
-            oclock::queue(new requests::ZeroPosition());
+            oclock::queue(new requests::ZeroPosition(0));
             AsyncRegister::byName("time_tracker", nullptr);
         }
     };
@@ -515,7 +515,7 @@ namespace oclock
         virtual void write_state(bool state) override
         {
             publish_state(false);
-            oclock::queue(new requests::SixPosition());
+            oclock::queue(new requests::ZeroPosition(NUMBER_OF_STEPS/2));
             AsyncRegister::byName("time_tracker", nullptr);
         }
     };
