@@ -1,9 +1,6 @@
 #include "channel.h"
 #include "hal.h"
 
-
-
-
 // Helper class to calucalte CRC8
 
 class CRC8
@@ -29,9 +26,6 @@ public:
 };
 
 // based on: http://www.gammon.com.au/forum/?id=11428
-
-
-
 
 class Protocol
 {
@@ -64,7 +58,7 @@ public:
 
     // helper private functions
     byte crc8(const byte *addr, byte len) { return CRC8::calc(addr, len); }
-    
+
     // send a byte complemented, repeated
     // only values sent would be (in hex):
     //   0F, 1E, 2D, 3C, 4B, 5A, 69, 78, 87, 96, A5, B4, C3, D2, E1, F0
@@ -120,14 +114,34 @@ public:
     // handle incoming data, return true if packet ready
     bool update();
 
+    inline void wait_for_room()
+    {
+        return;
+
+        bool waited = false;
+        int av = Serial.availableForWrite();
+        while (av < 20)
+        {
+            if (!waited)
+            {
+                ESP_LOGW(TAG, "Waited for available: %d", av);
+            }
+            waited = true;
+            delay(3); // FIX CRC ERRORS ?
+            av = Serial.availableForWrite();
+        }
+    }
+
     // send a message of "length" bytes (max 255) to other end
     // put STX at start, ETX at end, and add CRC
     inline void sendMsg(const byte *data, const byte length)
     {
+        wait_for_room();
         Serial.write(STX); // STX
         Hal::yield();
         for (byte i = 0; i < length; i++)
         {
+            wait_for_room();
             sendComplemented(data[i]);
         }
         Serial.write(ETX); // ETX
@@ -289,6 +303,9 @@ void Channel::skip()
 
 void Channel::start_receiving()
 {
+    if (receiving)
+        return;
+
     ESP_LOGD(TAG, "receiving = true");
 
     // make sure we are done with sending
@@ -317,11 +334,10 @@ void Channel::_send(const byte *bytes, const byte length)
 {
     if (receiving)
     {
-        //delay(200);
+        // delay(200);
         start_transmitting();
         // delay(10);
     }
-
     protocol_->sendMsg(bytes, length);
 }
 
