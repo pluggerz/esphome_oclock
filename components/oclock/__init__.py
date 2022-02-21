@@ -179,15 +179,15 @@ async def to_code(config):
     ligthConf = config[CONF_LIGHT]
     await to_code_light(ligthConf[CONF_RED],
                         cg.RawExpression(
-                            "[](float value){ oclock::requests::background_color(0, value); }")
+                            "[](float value){ oclock::requests::publish_background_color(0, value); }")
                         )
     await to_code_light(ligthConf[CONF_GREEN],
                         cg.RawExpression(
-                            "[](float value){ oclock::requests::background_color(1, value); }")
+                            "[](float value){ oclock::requests::publish_background_color(1, value); }")
                         )
     await to_code_light(ligthConf[CONF_BLUE],
                         cg.RawExpression(
-                            "[](float value){ oclock::requests::background_color(2, value); }")
+                            "[](float value){ oclock::requests::publish_background_color(2, value); }")
                         )
 
     # https://github.com/esphome/AsyncTCP/blob/master/library.json

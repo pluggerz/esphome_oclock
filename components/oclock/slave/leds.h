@@ -13,9 +13,6 @@
 // Create an object for writing to the LED strip.
 extern APA102<LED_DATA_PIN, LED_CLOCK_PIN> ledStrip;
 
-// Set the number of LEDs to control.
-constexpr int LED_COUNT = 12;
-
 typedef struct rgba_color
 {
     uint8_t red, green, blue;
@@ -34,6 +31,7 @@ typedef struct rgba_color
     }
     operator rgb_color() const { return rgb_color(red, green, blue); }
     rgba_color(){};
+    rgba_color(const oclock::RgbColor &c) : red(c.get_red()), green(c.get_green()), blue(c.get_blue()), alpha(31){};
     rgba_color(const rgb_color &c, uint8_t a) : red(c.red), green(c.green), blue(c.blue), alpha(a){};
     rgba_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 31) : red(r), green(g), blue(b), alpha(a){};
 } rgba_color;
@@ -89,14 +87,14 @@ private:
         Hal::yield();
         ledStrip.startFrame();
         Hal::yield();
-        const auto brightness=get_brightness();
+        const auto brightness = get_brightness();
         for (uint8_t i = 1; i <= LED_COUNT; i++)
         {
             const auto &led = leds[i % LED_COUNT];
-            int8_t forced_alpha=led.alpha;
+            int8_t forced_alpha = led.alpha;
             int alpha;
             if (forced_alpha < 0)
-                alpha=-forced_alpha;
+                alpha = -forced_alpha;
             else
                 alpha = round((double)led.alpha * (double)brightness / 31.0);
             if (alpha > 31)
@@ -110,6 +108,7 @@ private:
         Hal::yield();
         return true;
     }
+
 public:
     void updateLeds()
     {
@@ -164,11 +163,10 @@ public:
     }
 
 public:
-    static int scale_to_brightness(int scaled_brightness_) { return (1 << scaled_brightness_)  -1; }
+    static int scale_to_brightness(int scaled_brightness_) { return (1 << scaled_brightness_) - 1; }
 
     int get_scaled_brightness() const { return slave_settings.get_scaled_brightness(); }
     int get_brightness() const { return scale_to_brightness(get_scaled_brightness()); }
-    
 
     void set_led_layer(BackgroundLayer *ledLayer)
     {
@@ -198,7 +196,8 @@ public:
         updateLeds();
     }
 
-    ForegroundLayer* get_foreground_led_layer() const {
+    ForegroundLayer *get_foreground_led_layer() const
+    {
         return foregroundLayer_;
     }
 

@@ -35,6 +35,7 @@ enum MsgType
   MSG_SETTINGS_MODE = 18,
   MSG_INFORM_STOP_ANIMATION = 19,
   MSG_WAIT_FOR_ANIMATION = 20,
+  MSG_RGB_LEDS = 21,
 };
 
 struct UartMessage
@@ -64,6 +65,13 @@ public:
   const bool value;
 
   UartBoolMessage(MsgType msgType, bool value) : UartMessage(-1, msgType), value(value) {}
+} __attribute__((packed, aligned(1)));
+
+struct UartRgbLedsMessage : public UartMessage
+{
+public:
+  oclock::RgbColorLeds leds;
+  UartRgbLedsMessage(const oclock::RgbColorLeds &leds) : UartMessage(-1, MSG_RGB_LEDS), leds(leds) {}
 } __attribute__((packed, aligned(1)));
 
 struct UartAcceptMessage : public UartMessage
@@ -184,9 +192,10 @@ public:
 struct UartColorMessage : public UartMessage
 {
 public:
+  // TODO: get rid of brightness?
   uint8_t red, green, blue, brightness;
 
-  UartColorMessage() : UartMessage(-1, MSG_COLOR) {}
+  UartColorMessage(const oclock::RgbColor &c) : UartMessage(-1, MSG_COLOR), red(c.red), green(c.green), blue(c.blue), brightness(15) {}
 } __attribute__((packed, aligned(1)));
 
 class InteropStringifier

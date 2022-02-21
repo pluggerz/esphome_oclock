@@ -2,28 +2,43 @@
 
 #include "requests.h"
 
-UartColorMessage uartColorMessage;
-UartColorMessage sendUartColorMessage;
+// UartColorMessage uartColorMessage;
+//  UartColorMessage sendUartColorMessage;
 
-class LedColorRequest final : public oclock::ExecuteRequest
+class RgbLedColorRequest final : public oclock::ExecuteRequest
 {
+    oclock::RgbColorLeds leds;
 
     virtual void execute() override
     {
-        if (!memcmp(&uartColorMessage, &sendUartColorMessage, sizeof(UartColorMessage)))
-        {
-            ESP_LOGD(TAG, "ignore send: (r,g,b)=(%02x, %02x, %02x)",
-                     uartColorMessage.red, uartColorMessage.green, uartColorMessage.blue);
-            return;
-        }
-        ESP_LOGI(TAG, "send: (r,g,b)=(%02x, %02x, %02x)",
-                 uartColorMessage.red, uartColorMessage.green, uartColorMessage.blue);
-        sendUartColorMessage = uartColorMessage;
-        send(sendUartColorMessage);
+        send(UartRgbLedsMessage(leds));
     }
 
 public:
-    LedColorRequest() : ExecuteRequest("LedColorRequest") {}
+    RgbLedColorRequest(const oclock::RgbColorLeds &leds) : ExecuteRequest("RgbLedColorRequest"), leds(leds) {}
+};
+
+void oclock::requests::publish_rgb_leds(const oclock::RgbColorLeds &leds)
+{
+    oclock::queue(new RgbLedColorRequest(leds));
+};
+
+bool ledColorRequestIsQueued = false;
+class LedColorRequest final : public oclock::ExecuteRequest
+{
+    virtual void execute() override
+    {
+        auto color = oclock::master.get_background_color();
+        ESP_LOGI(TAG, "send: (r,g,b)=(%02x, %02x, %02x)", color.red, color.green, color.blue);
+        send(UartColorMessage(color));
+        ledColorRequestIsQueued = false;
+    }
+
+public:
+    LedColorRequest(const oclock::RgbColor &color) : ExecuteRequest("LedColorRequest")
+    {
+        ledColorRequestIsQueued = true;
+    }
 };
 
 class SetScaledBrightnessRequest final : public oclock::ExecuteRequest
@@ -54,32 +69,29 @@ void oclock::requests::publish_brightness(const int value)
         return;
     oclock::queue(new SetScaledBrightnessRequest(value));
 }
-
-void oclock::requests::background_color(const int component_, const float value_)
+void oclock::requests::publish_background_color(const RgbColor &color)
 {
+    oclock::master.set_background_color(color);
+    if (!ledColorRequestIsQueued)
+        oclock::queue(new LedColorRequest(color));
+}
+
+void oclock::requests::publish_background_color(const int component_, const float value_)
+{
+    auto color = oclock::master.get_background_color();
     uint8_t value = value_ * 0xFF;
-    bool do_send = false;
     switch (component_)
     {
-#define CASE(COMPONENT, FIELD)               \
-    case COMPONENT:                          \
-        if (uartColorMessage.FIELD == value) \
-            do_send = true;                  \
-        uartColorMessage.FIELD = value;      \
+#define CASE(COMPONENT, FIELD) \
+    case COMPONENT:            \
+        color.FIELD = value;   \
         break;
 
         CASE(0, red);
         CASE(1, green);
         CASE(2, blue);
     }
-    uartColorMessage.brightness = 31;
-    if (!do_send)
-    {
-        ESP_LOGD(TAG, "ignoring: color=%d value=%f", component_, value_);
-        return;
-    }
-
-    oclock::queue(new LedColorRequest());
+    publish_background_color(color);
 }
 
 #endif

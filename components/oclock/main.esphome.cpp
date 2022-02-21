@@ -129,6 +129,7 @@ public:
         modes["Bright Twinkle"] = BackgroundEnum::BrightTwinkle;
         modes["Collision"] = BackgroundEnum::Collision;
         modes["Rainbow"] = BackgroundEnum::Rainbow;
+        modes["Rgb Colors"] = BackgroundEnum::RgbColors;
     }
 } background_led_map;
 
@@ -290,6 +291,11 @@ void text_callback(const std::string &value)
 
 void update_from_components()
 {
+    RgbColorLeds leds;
+    for (int idx = 0; idx < LED_COUNT; ++idx)
+        leds[idx] = oclock::RgbColor::HtoRGB(idx * 30);
+    oclock::requests::publish_rgb_leds(leds);
+
     // handles  animation
     init_select(oclock::esp_components.handles_animation, handles_animation_callback);
     // distance calculculator

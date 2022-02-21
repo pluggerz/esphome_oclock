@@ -357,6 +357,12 @@ void do_position_request(const UartMessage *msg)
     uart.start_receiving();
 }
 
+void do_rgb_leds(const UartRgbLedsMessage *msg)
+{
+    rgbLedLayer(msg->leds);
+    slave_settings.set_background_mode(oclock::BackgroundEnum::RgbColors);
+}
+
 void do_led_background_mode_request(const LedModeRequest *msg)
 {
     slave_settings.set_background_mode(msg->get_background_enum());
@@ -367,6 +373,14 @@ void SlaveSettings::set_background_mode(oclock::BackgroundEnum value)
     background_mode_ = value;
     switch (background_mode_)
     {
+    case oclock::BackgroundEnum::RgbColors:
+    {
+        auto &layer = rgbLedLayer();
+        layer.start();
+        ledAsync.set_led_layer(&layer);
+        break;
+    }
+
     case oclock::BackgroundEnum::SolidColor:
         backgroundLedLayer.start();
         ledAsync.set_led_layer(&backgroundLedLayer);
@@ -416,9 +430,25 @@ void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
         return;
 
     case oclock::ForegroundEnum::None:
-    default:
         ESP_LOGI(TAG, "fg.leds.nullptr");
         ledAsync.set_foreground_led_layer(nullptr);
+        return;
+
+    case oclock::ForegroundEnum::BrightnessSelector:
+        ESP_LOGI(TAG, "fg.leds.br.sel");
+        ledAsync.set_foreground_led_layer(&brightnessSelectorLayer());
+        break;
+
+    case oclock::ForegroundEnum::SpeedSelector:
+        ESP_LOGI(TAG, "fg.leds.speed.sel");
+        speedLedLayer.set_color(rgba_color(0xFF, 0xFF, 0xFF));
+        speedLedLayer.start();
+        ledAsync.set_led_layer(&speedLedLayer);
+        ledAsync.set_foreground_led_layer(&settingSpeedLayer);
+        break;
+
+    default:
+        ESP_LOGI(TAG, "fg.leds.ignored");
         return;
     }
 }
@@ -431,23 +461,18 @@ void do_led_mode_request(const LedModeRequest *msg)
         do_led_background_mode_request(msg);
 }
 
+// TODO: obsolete?
 void do_settings_mode_request(const SettingsModeRequest *msg)
 {
     const auto mode = msg->get_mode();
     switch (mode)
     {
     case oclock::EditMode::Speed:
-        speedLedLayer.set_color(rgba_color(0xFF, 0xFF, 0xFF));
-        speedLedLayer.start();
-        ledAsync.set_led_layer(&speedLedLayer);
-        settingSpeedLayer.set_mode(mode);
-        ledAsync.set_foreground_led_layer(&settingSpeedLayer);
         break;
 
     case oclock::EditMode::Brightness:
     case oclock::EditMode::Background:
     default:
-        ledAsync.set_foreground_led_layer(&settingsLedLayer(int(mode)));
         break;
     }
 }
@@ -528,6 +553,10 @@ auto uartMainListener = [](const UartMessage *msg)
 
     case MSG_SETTINGS_MODE:
         do_settings_mode_request(reinterpret_cast<const SettingsModeRequest *>(msg));
+        return true;
+
+    case MSG_RGB_LEDS:
+        do_rgb_leds(reinterpret_cast<const UartRgbLedsMessage *>(msg));
         return true;
 
     default:

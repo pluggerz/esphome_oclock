@@ -24,6 +24,7 @@ namespace oclock
         SlaveConfig slaves_[24];
         BackgroundEnum background_led_mode_{BackgroundEnum::First};
         ForegroundEnum foreground_led_mode_{ForegroundEnum::First};
+        RgbColor background_color_;
         int brightness_{0};
         int base_speed{12};
         ActiveMode active_mode{ActiveMode::None};
@@ -43,6 +44,9 @@ namespace oclock
 
         ActiveMode get_active_mode() const { return active_mode; }
         void set_active_mode(const ActiveMode &value) { active_mode = value; }
+
+        RgbColor get_background_color() const { return background_color_; }
+        void set_background_color(const RgbColor &value) { background_color_ = value; }
 
         int get_base_speed() const { return base_speed; }
         void set_base_speed(int value) { base_speed = value; }

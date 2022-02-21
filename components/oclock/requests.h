@@ -14,9 +14,11 @@ namespace oclock
 {
     namespace requests
     {
+        void publish_rgb_leds(const RgbColorLeds &leds);
         void publish_brightness(const int value);
 
-        void background_color(const int component, const float value);
+        void publish_background_color(const int component, const float value);
+        void publish_background_color(const RgbColor &color);
 
         class AnimationRequest : public oclock::BroadcastRequest
         {

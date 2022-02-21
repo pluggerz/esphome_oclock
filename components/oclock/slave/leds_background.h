@@ -3,6 +3,9 @@
 #include "leds.h"
 #include "hal.h"
 
+BackgroundLayer &rgbLedLayer(const oclock::RgbColorLeds &leds);
+BackgroundLayer &rgbLedLayer();
+
 namespace BackgroundLedAnimations
 {
     class Off;
@@ -57,7 +60,7 @@ class BackgroundLedAnimations::Xmas : public BackgroundLayer
 
     // system timer, incremented by one every time through the main loop
     unsigned int loopCount = 0;
-    unsigned int delayInMillis=20;
+    unsigned int delayInMillis = 20;
     unsigned int seed = 0; // used to initialize random number generator
 
 public:
@@ -91,7 +94,7 @@ public:
     }
 
 private:
-    virtual void combine(Leds& result) const override
+    virtual void combine(Leds &result) const override
     {
         for (int idx = 0; idx < LED_COUNT; ++idx)
         {
@@ -206,7 +209,7 @@ private:
             maxLoops = 250;
             gradient();
             delayInMillis = 26;
-            //delay(6); // add an extra 6ms delay to slow things down
+            // delay(6); // add an extra 6ms delay to slow things down
             break;
 
         case BrightTwinkle:
@@ -1030,10 +1033,10 @@ class BackgroundLedAnimations::Rainbow : public BackgroundLayer
     }
 
     /*** Converts a color from HSV to RGB.
-    * h is hue, as a number between 0 and 360.
-    * s is the saturation, as a number between 0 and 255.
-    * v is the value, as a number between 0 and 255. 
-    ***/
+     * h is hue, as a number between 0 and 360.
+     * s is the saturation, as a number between 0 and 255.
+     * v is the value, as a number between 0 and 255.
+     ***/
     rgba_color hsvToRgb(uint16_t h, uint8_t s, uint8_t v) const
     {
         uint8_t f = (h % 60) * 255 / 60;

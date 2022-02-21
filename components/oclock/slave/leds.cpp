@@ -8,13 +8,12 @@ APA102<LED_DATA_PIN, LED_CLOCK_PIN> ledStrip;
 
 uint8_t HighlightLedLayer::ledAlphas[LED_COUNT] = {};
 
-class SettingsLayer : public ForegroundLayer
+class BrightnessSettingsLayer : public ForegroundLayer
 {
 private:
-    int8_t mode_{-1};
     Millis lastTime{0};
 
-    void combine_brightness(Leds &leds) const
+    virtual void combine(Leds &leds) const override
     {
         int active_scaled_brightness = ledAsync.get_scaled_brightness();
         for (int scaled_brightness = 1; scaled_brightness <= 5; scaled_brightness++)
@@ -27,27 +26,6 @@ private:
         }
     }
 
-    void combine_background(Leds &leds) const {
-        
-     };
-
-    virtual void combine(Leds &leds) const override
-    {
-        switch (mode_)
-        {
-        case 0:
-            combine_brightness(leds);
-            return;
-
-        case 1:
-            combine_background(leds);
-            return;
-
-        default:
-            return;
-        }
-    }
-
     virtual bool update(Millis now) override final
     {
         if (now - lastTime > 100)
@@ -56,12 +34,6 @@ private:
             return true;
         }
         return false;
-    }
-
-public:
-    void set_mode(int8_t mode)
-    {
-        this->mode_ = mode;
     }
 };
 
@@ -149,8 +121,53 @@ private:
     }
 };
 
+class RgbLedLayer : public BackgroundLayer
+{
+    Leds leds_;
+    Millis lastTime{0};
+
+    virtual void combine(Leds &leds) const override
+    {
+        for (int idx = 0; idx < LED_COUNT; ++idx)
+        {
+            leds[idx] = leds_[idx];
+        }
+    }
+
+    virtual bool update(Millis now) override final
+    {
+        if (now - lastTime > 100)
+        {
+            lastTime = now;
+            return true;
+        }
+        return false;
+    }
+
+public:
+    void set(const oclock::RgbColorLeds &leds)
+    {
+        for (int idx = 0; idx < LED_COUNT; ++idx)
+        {
+            leds_[idx] = leds[idx];
+        }
+    };
+};
+
+RgbLedLayer rgbLedLayer_;
+
+BackgroundLayer &rgbLedLayer(const oclock::RgbColorLeds &leds)
+{
+    rgbLedLayer_.set(leds);
+    return rgbLedLayer_;
+}
+BackgroundLayer &rgbLedLayer()
+{
+    return rgbLedLayer_;
+}
+
 DebugLayer debugLedLayer_;
-SettingsLayer settingsLedLayer_;
+BrightnessSettingsLayer brightnessSettingsLayer_;
 FollowHandlesLedLayer followHandlesLayer_;
 
 ForegroundLayer &debugLedLayer()
@@ -158,10 +175,9 @@ ForegroundLayer &debugLedLayer()
     return debugLedLayer_;
 }
 
-ForegroundLayer &settingsLedLayer(int8_t mode)
+ForegroundLayer &brightnessSelectorLayer()
 {
-    settingsLedLayer_.set_mode(mode);
-    return settingsLedLayer_;
+    return brightnessSettingsLayer_;
 }
 
 ForegroundLayer &followHandlesLayer(bool forced)

@@ -74,6 +74,8 @@ public:
   TrackSpeedTask(EditMode mode) : AsyncDelay(100), mode_(mode) {}
 };
 
+#define H_STEP 15
+
 void publish_settings()
 {
   AsyncRegister::byName("time_tracker", nullptr);
@@ -82,7 +84,30 @@ void publish_settings()
   oclock::queue(new oclock::requests::EnterSettingsMode(mode));
   switch (mode)
   {
+  case EditMode::BackgroundColor:
+  {
+    // get current background
+    oclock::queue(new requests::BackgroundModeSelectRequest(BackgroundEnum::RgbColors));
+    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::None));
+
+    int h = oclock::master.get_background_color().asH();
+    RgbColorLeds leds;
+    for (int idx = 0; idx < LED_COUNT; ++idx)
+    {
+      int newH = (h + (idx - LED_COUNT / 2) * H_STEP) % 360;
+      if (newH < 0)
+        newH += 360;
+      leds[idx] = oclock::RgbColor::HtoRGB(newH);
+    }
+
+    oclock::requests::publish_rgb_leds(leds);
+    ESP_LOGI(TAG, "Publishing edit mode: mode=%d/BackgroundColor", mode);
+  }
+  break;
+
   case EditMode::Brightness:
+    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::BrightnessSelector));
+
     // nothing to do, just make sure we use the original settings
     ESP_LOGI(TAG, "Publishing edit mode: mode=%d/Brightness", mode);
     publish(esp_components.background);
@@ -90,6 +115,8 @@ void publish_settings()
 
   case EditMode::Speed:
   {
+    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::SpeedSelector));
+
     ESP_LOGI(TAG, "Publishing edit mode: mode=%d/Speed or TurnSpeed or TurnSteps", mode);
     // speed
     AsyncRegister::byName("time_tracker", new TrackSpeedTask(mode));
@@ -136,7 +163,7 @@ void oclock::Master::edit_next()
   auto raw_mode = int(master.get_edit_mode()) + 1;
   if (raw_mode > int(EditMode::Last))
     raw_mode = 0;
-  const auto &mode = EditMode(raw_mode);
+  auto mode = EditMode(raw_mode);
   master.set_edit_mode(mode);
   ESP_LOGI(TAG, "Changing to edit mode: mode = %d", mode);
   publish_settings();
@@ -226,6 +253,16 @@ void edit_add_value(int direction, bool big)
       publish_previous(component);
     }
     ESP_LOGI(TAG, "EditMode::Background after -> %s", component->state.c_str());
+  }
+  break;
+
+  case EditMode::BackgroundColor:
+  {
+    int newH = (oclock::master.get_background_color().asH() + direction * H_STEP) % 360;
+    if (newH < 0)
+      newH += 360;
+    oclock::requests::publish_background_color(oclock::RgbColor::HtoRGB(newH));
+    publish_settings();
   }
   break;
 

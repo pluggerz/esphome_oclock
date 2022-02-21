@@ -4,8 +4,9 @@
 
 #include "enums.h"
 
-ForegroundLayer &settingsLedLayer(int8_t mode);
 ForegroundLayer &debugLedLayer();
+ForegroundLayer &brightnessSelectorLayer();
+
 /**
  * @brief
  *
@@ -116,8 +117,6 @@ class FollowHandlesLedLayer : public HighlightLedLayer
 
 class SpeedRelatedLedLayer : public HighlightLedLayer
 {
-  oclock::EditMode mode_ = oclock::EditMode::Speed;
-
   bool reverse{false};
   uint8_t reverse_check_{0};
 
@@ -138,7 +137,7 @@ class SpeedRelatedLedLayer : public HighlightLedLayer
     }
 
     clear_all_leds();
-    /* if (reverse)
+    /* if (reverse) some magic
     {
       if (mode_ == oclock::EditMode::TurnSteps)
         offset = 0;
@@ -150,7 +149,4 @@ class SpeedRelatedLedLayer : public HighlightLedLayer
     add_sparkle((offset + 1 * MAX_STEPS / 2) % MAX_STEPS);
     return true;
   }
-
-public:
-  void set_mode(oclock::EditMode value) { mode_ = value; }
 };
