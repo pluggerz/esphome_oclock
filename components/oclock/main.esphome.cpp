@@ -115,20 +115,20 @@ void active_mode_callback(const std::string &mode)
     }
 }
 
-class BackgroundLedMap : public AbstractMap<int>
+class BackgroundLedMap : public AbstractMap<BackgroundEnum>
 {
 public:
     BackgroundLedMap()
     {
-        modes["Solid Color"] = 0;
-        modes["Warm White Shimmer"] = 1;
-        modes["Random Color Walk"] = 2;
-        modes["Traditional Colors"] = 3;
-        modes["Color Explosion"] = 4;
-        modes["Gradient"] = 5;
-        modes["Bright Twinkle"] = 6;
-        modes["Collision"] = 7;
-        modes["Rainbow"] = 8;
+        modes["Solid Color"] = BackgroundEnum::SolidColor;
+        modes["Warm White Shimmer"] = BackgroundEnum::WarmWhiteShimmer;
+        modes["Random Color Walk"] = BackgroundEnum::RandomColorWalk;
+        modes["Traditional Colors"] = BackgroundEnum::TraditionalColors;
+        modes["Color Explosion"] = BackgroundEnum::ColorExplosion;
+        modes["Gradient"] = BackgroundEnum::Gradient;
+        modes["Bright Twinkle"] = BackgroundEnum::BrightTwinkle;
+        modes["Collision"] = BackgroundEnum::Collision;
+        modes["Rainbow"] = BackgroundEnum::Rainbow;
     }
 } background_led_map;
 
@@ -144,14 +144,14 @@ void background_led_callback(const std::string &mode)
         ESP_LOGE(__FUNCTION__, "NOT FOUND: %s", mode.c_str());
 }
 
-class ForegroundLedMap : public AbstractMap<int>
+class ForegroundLedMap : public AbstractMap<ForegroundEnum>
 {
 public:
     ForegroundLedMap()
     {
-        modes["None"] = 0;
-        modes["Debug Leds"] = 1;
-        modes["Follow Handles"] = 2;
+        modes["None"] = ForegroundEnum::None;
+        modes["Debug Leds"] = ForegroundEnum::DebugLeds;
+        modes["Follow Handles"] = ForegroundEnum::FollowHandles;
     }
 } foreground_led_map;
 

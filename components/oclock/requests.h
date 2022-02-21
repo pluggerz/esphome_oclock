@@ -540,7 +540,7 @@ namespace oclock
         class BackgroundModeSelectRequest final : public oclock::ExecuteRequest
         {
         public:
-            BackgroundModeSelectRequest(int mode) : ExecuteRequest("BackgroundModeSelectRequest")
+            BackgroundModeSelectRequest(BackgroundEnum mode) : ExecuteRequest("BackgroundModeSelectRequest")
             {
                 oclock::master.set_led_background_mode(mode);
             }
@@ -549,14 +549,14 @@ namespace oclock
             {
                 // just send latests
                 auto mode = oclock::master.get_led_background_mode();
-                send(LedModeRequest(false, mode));
+                send(LedModeRequest(mode));
             }
         };
 
         class ForegroundModeSelectRequest final : public oclock::ExecuteRequest
         {
         public:
-            ForegroundModeSelectRequest(int mode) : ExecuteRequest("ForegroundModeSelectRequest")
+            ForegroundModeSelectRequest(ForegroundEnum mode) : ExecuteRequest("ForegroundModeSelectRequest")
             {
                 oclock::master.set_led_foreground_mode(mode);
             }
@@ -565,7 +565,7 @@ namespace oclock
             {
                 // just send latests
                 auto mode = oclock::master.get_led_foreground_mode();
-                send(LedModeRequest(true, mode));
+                send(LedModeRequest(mode));
             }
         };
 

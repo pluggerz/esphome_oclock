@@ -2,6 +2,28 @@
 
 namespace oclock
 {
+    enum class ForegroundEnum
+    {
+        First = 0,
+        None = First,
+        DebugLeds,
+        FollowHandles
+    };
+
+    enum class BackgroundEnum
+    {
+        First = 0,
+        SolidColor = First,
+        WarmWhiteShimmer,
+        RandomColorWalk,
+        TraditionalColors,
+        ColorExplosion,
+        Gradient,
+        BrightTwinkle,
+        Collision,
+        Rainbow,
+    };
+
     enum class InBetweenAnimationEnum
     {
         Random,
@@ -41,6 +63,7 @@ namespace oclock
         None = -1,
         Brightness = 0,
         Background,
+        BackgroundColor,
         Speed,
         Last = Speed
     };

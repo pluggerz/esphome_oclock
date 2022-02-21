@@ -115,10 +115,14 @@ public:
 
 struct LedModeRequest : public UartMessage
 {
+  uint8_t raw_mode_;
+
 public:
   bool foreground;
-  uint8_t mode;
-  LedModeRequest(bool foreground, uint8_t mode) : UartMessage(-1, MSG_LED_MODE), foreground(foreground), mode(mode) {}
+  oclock::ForegroundEnum get_foreground_enum() const { return static_cast<oclock::ForegroundEnum>(raw_mode_); }
+  oclock::BackgroundEnum get_background_enum() const { return static_cast<oclock::BackgroundEnum>(raw_mode_); }
+  LedModeRequest(oclock::BackgroundEnum mode) : UartMessage(-1, MSG_LED_MODE), raw_mode_(int(mode)), foreground(false) {}
+  LedModeRequest(oclock::ForegroundEnum mode) : UartMessage(-1, MSG_LED_MODE), raw_mode_(int(mode)), foreground(true) {}
 } __attribute__((packed, aligned(1)));
 
 struct UartLogMessage : public UartMessage

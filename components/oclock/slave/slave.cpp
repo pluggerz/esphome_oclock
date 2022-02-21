@@ -359,34 +359,34 @@ void do_position_request(const UartMessage *msg)
 
 void do_led_background_mode_request(const LedModeRequest *msg)
 {
-    slave_settings.set_background_mode(msg->mode);
+    slave_settings.set_background_mode(msg->get_background_enum());
 }
 
-void SlaveSettings::set_background_mode(int value)
+void SlaveSettings::set_background_mode(oclock::BackgroundEnum value)
 {
-    background_mode_ = value % 9;
+    background_mode_ = value;
     switch (background_mode_)
     {
-    case 0:
+    case oclock::BackgroundEnum::SolidColor:
         backgroundLedLayer.start();
         ledAsync.set_led_layer(&backgroundLedLayer);
         break;
 
 #define CASE_XMAS(CASE, WHAT)                                         \
-    case CASE:                                                        \
+    case oclock::BackgroundEnum::CASE:                                \
         xmasLedLayer.setPattern(BackgroundLedAnimations::Xmas::WHAT); \
         ledAsync.set_led_layer(&xmasLedLayer);                        \
         break;
 
-        CASE_XMAS(1, WarmWhiteShimmer);
-        CASE_XMAS(2, RandomColorWalk);
-        CASE_XMAS(3, TraditionalColors);
-        CASE_XMAS(4, ColorExplosion);
-        CASE_XMAS(5, Gradient);
-        CASE_XMAS(6, BrightTwinkle);
-        CASE_XMAS(7, Collision);
+        CASE_XMAS(WarmWhiteShimmer, WarmWhiteShimmer);
+        CASE_XMAS(RandomColorWalk, RandomColorWalk);
+        CASE_XMAS(TraditionalColors, TraditionalColors);
+        CASE_XMAS(ColorExplosion, ColorExplosion);
+        CASE_XMAS(Gradient, Gradient);
+        CASE_XMAS(BrightTwinkle, BrightTwinkle);
+        CASE_XMAS(Collision, Collision);
 
-    case 8:
+    case oclock::BackgroundEnum::Rainbow:
         ledAsync.set_led_layer(&rainbowLedLayer);
         break;
 
@@ -397,25 +397,25 @@ void SlaveSettings::set_background_mode(int value)
 
 void do_led_foreground_mode_request(const LedModeRequest *msg)
 {
-    slave_settings.set_foreground_mode(msg->mode);
+    slave_settings.set_foreground_mode(msg->get_foreground_enum());
 }
 
-void SlaveSettings::set_foreground_mode(int value)
+void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
 {
-    foreground_mode_ = value % 3;
+    foreground_mode_ = value;
     switch (foreground_mode_)
     {
-    case 1:
+    case oclock::ForegroundEnum::DebugLeds:
         ESP_LOGI(TAG, "fg.leds.debugLedLayer");
         ledAsync.set_foreground_led_layer(&debugLedLayer());
         return;
 
-    case 2:
+    case oclock::ForegroundEnum::FollowHandles:
         ESP_LOGI(TAG, "fg.leds.followHandlesLayer");
         ledAsync.set_foreground_led_layer(&followHandlesLayer(false));
         return;
 
-    case 0:
+    case oclock::ForegroundEnum::None:
     default:
         ESP_LOGI(TAG, "fg.leds.nullptr");
         ledAsync.set_foreground_led_layer(nullptr);
@@ -437,8 +437,6 @@ void do_settings_mode_request(const SettingsModeRequest *msg)
     switch (mode)
     {
     case oclock::EditMode::Speed:
-    case oclock::EditMode::TurnSpeed:
-    case oclock::EditMode::TurnSteps:
         speedLedLayer.set_color(rgba_color(0xFF, 0xFF, 0xFF));
         speedLedLayer.start();
         ledAsync.set_led_layer(&speedLedLayer);
