@@ -12,7 +12,6 @@
 
 namespace oclock
 {
-    
 
     class OClockStubController : public Component
     {

@@ -3,6 +3,7 @@
 #include "oclock.h"
 #include "channel.h"
 #include "ticks.h"
+#include "enums.h"
 
 #ifdef ESP8266
 #include <functional>
@@ -31,6 +32,9 @@ enum MsgType
   MSG_SLAVE_CONFIG = 15,
   MSG_BRIGHTNESS = 16,
   MSG_BOOL_DEBUG_LED_LAYER = 17,
+  MSG_SETTINGS_MODE = 18,
+  MSG_INFORM_STOP_ANIMATION = 19,
+  MSG_WAIT_FOR_ANIMATION = 20,
 };
 
 struct UartMessage
@@ -100,6 +104,15 @@ public:
   UartDoneMessage(uint8_t source_id, uint8_t assignedId) : UartMessage(source_id, MSG_ID_DONE), assignedId(assignedId) {}
 } __attribute__((packed, aligned(1)));
 
+struct SettingsModeRequest : public UartMessage
+{
+  int8_t raw_mode_;
+
+public:
+  SettingsModeRequest(oclock::EditMode mode) : UartMessage(-1, MSG_SETTINGS_MODE), raw_mode_(int8_t(mode)) {}
+  oclock::EditMode get_mode() const { return static_cast<oclock::EditMode>(raw_mode_); }
+} __attribute__((packed, aligned(1)));
+
 struct LedModeRequest : public UartMessage
 {
 public:
@@ -142,12 +155,26 @@ public:
   UartDumpLogsRequest(bool dump_config, u8 source_id, u8 destination_id) : UartMessage(source_id, MSG_DUMP_LOG_REQUEST, destination_id), dump_config(dump_config) {}
 } __attribute__((packed, aligned(1)));
 
-struct UartBrightnessMessage : public UartMessage
+struct UartInformToStopAnimationRequest : public UartMessage
 {
 public:
-  const uint8_t brightness;
+  UartInformToStopAnimationRequest() : UartMessage(-1, MSG_INFORM_STOP_ANIMATION) {}
+} __attribute__((packed, aligned(1)));
 
-  UartBrightnessMessage(uint8_t brightness) : UartMessage(-1, MSG_BRIGHTNESS), brightness(brightness) {}
+struct UartWaitUntilAnimationIsDoneRequest : public UartMessage
+{
+public:
+  UartWaitUntilAnimationIsDoneRequest() : UartMessage(-1, MSG_WAIT_FOR_ANIMATION, 0) {}
+  UartWaitUntilAnimationIsDoneRequest(u8 source_id, u8 destination_id) : UartMessage(source_id, MSG_WAIT_FOR_ANIMATION, destination_id) {}
+} __attribute__((packed, aligned(1)));
+
+struct UartScaledBrightnessMessage : public UartMessage
+{
+public:
+  // value between 0..5
+  const uint8_t scaled_brightness;
+
+  UartScaledBrightnessMessage(uint8_t scaled_brightness) : UartMessage(-1, MSG_BRIGHTNESS), scaled_brightness(scaled_brightness) {}
 } __attribute__((packed, aligned(1)));
 
 struct UartColorMessage : public UartMessage
@@ -197,6 +224,10 @@ public:
       return F("DUMP_LOGS");
     case MSG_SLAVE_CONFIG:
       return F("CONFIG");
+    case MSG_INFORM_STOP_ANIMATION:
+      return F("INFORM_STOP_ANIMATION");
+    case MSG_WAIT_FOR_ANIMATION:
+      return F("WAIT_FOR_ANIMATION");
     default:
       return F("MSG_???");
     }
@@ -316,10 +347,10 @@ class InteropRS485 : public Channel
 {
 private:
   /**
-   * owner_id: 
+   * owner_id:
    * if -1/0xFF accept all messages: NB: filtering should be done by the listener ( master )
    * if ALL_SLAVES broadcast address
-   * otherwise 
+   * otherwise
    */
   uint8_t owner_id_{ALL_SLAVES};
   InteropRS485ReceiverFuncPtr listener_{nullptr};
@@ -391,33 +422,41 @@ public:
   }
 };
 
+#ifdef ESP8266
 namespace oclock
 {
+
   /**
-     * Note: initially, lambdas seems to very naturally to use postponing tasks.
-     * Especially if you come from a Java background. 
-     * Put a task in a queue and execute it when it is done. This would work
-     * in Java since the lambda itself is also garbage collected.
-     * This, however, is not true in C++, here a lambda is undefined when it goes out of scope, 
-     * or its captured variables. To avoid its pitfalls I use the ExecuteRequest instead.
-     *
-     **/
+   * Note: initially, lambdas seems to very naturally to use postponing tasks.
+   * Especially if you come from a Java background.
+   * Put a task in a queue and execute it when it is done. This would work
+   * in Java since the lambda itself is also garbage collected.
+   * This, however, is not true in C++, here a lambda is undefined when it goes out of scope,
+   * or its captured variables. To avoid its pitfalls I use the ExecuteRequest instead.
+   *
+   **/
   class ChannelRequest
   {
   private:
     void send_raw(const UartMessage *msg, const byte length);
+    const std::string alias_;
 
   public:
+    ChannelRequest(const std::string &alias) : alias_(alias) {}
     template <typename M>
     void send(const M &m)
     {
       send_raw(&m, (byte)sizeof(M));
     }
     virtual ~ChannelRequest() {}
+    const std::string &get_alias() const { return alias_; }
   };
 
   class ExecuteRequest : public ChannelRequest
   {
+  protected:
+    ExecuteRequest(const std::string &alias) : ChannelRequest(alias) {}
+
   public:
     // 'execute' is called when the slaves are initialized
     virtual void execute() = 0;
@@ -425,6 +464,9 @@ namespace oclock
 
   class BroadcastRequest : public ChannelRequest
   {
+  protected:
+    BroadcastRequest(const std::string &alias) : ChannelRequest(alias) {}
+
   public:
     // 'execute' is called when the slaves are initialized
     virtual void execute() = 0;
@@ -447,10 +489,11 @@ namespace oclock
     {
     public:
       const M msg;
-      SendRequest(const M &msg) : msg(msg){};
+      SendRequest(const M &msg) : ExecuteRequest("SendRequest"), msg(msg){};
 
       virtual void execute() override { send(msg); }
     };
     oclock::queue(new SendRequest(msg));
   }
 } // namespace oclock
+#endif

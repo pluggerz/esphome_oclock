@@ -10,9 +10,8 @@ using namespace esphome;
 
 typedef std::function<int(int from, int to)> StepCalculator;
 
- int Instructions::turn_speed{8};
- int Instructions::turn_speed_steps{5};
-
+int Instructions::turn_speed{8};
+int Instructions::turn_steps{5};
 
 DistanceCalculators::Func DistanceCalculators::shortest = [](int from, int to)
 {
@@ -136,9 +135,9 @@ class ClockIdUtil
 {
 public:
     /***
-     *        column: 
-     *           0  1    2   3     4   5   6   7 
-     * row  0 :  0  1    6   7    12  13  18  19  
+     *        column:
+     *           0  1    2   3     4   5   6   7
+     * row  0 :  0  1    6   7    12  13  18  19
      *      1 :  2  3    8   9    14  15  20  21
      *      2 :  4  5   10  11    16  17  22  23
      */

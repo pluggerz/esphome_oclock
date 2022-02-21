@@ -1,5 +1,9 @@
 #pragma once
 
+#include "enums.h"
+
+typedef unsigned long Millis;
+
 namespace oclock
 {
     class SlaveConfig
@@ -15,39 +19,6 @@ namespace oclock
         Handle handles[2];
     };
 
-    enum class InBetweenAnimationEnum
-    {
-        Random,
-        None,
-        Star,
-        Dash,
-        Middle1,
-        Middle2,
-        PacMan,
-    };
-
-    enum class HandlesDistanceEnum
-    {
-        Random,
-        Shortest,
-        Left,
-        Right,
-    };
-
-    enum class HandlesAnimationEnum
-    {
-        Random,
-        Swipe,
-        Distance,
-    };
-
-    enum class ActiveMode
-    {
-        None,
-        TrackHassioTime,
-        TrackInternalTime,
-        TrackTestTime,
-    };
 
     class Master
     {
@@ -57,6 +28,9 @@ namespace oclock
         int brightness_{0};
         int base_speed{12};
         ActiveMode active_mode{ActiveMode::None};
+
+        bool in_edit{false};
+        EditMode edit_mode{EditMode::Brightness};
 
         long op_delay_t_millis{0};
         void loop_pre_accept(Millis t);
@@ -91,6 +65,19 @@ namespace oclock
 
         void set_in_between_animation_mode(InBetweenAnimationEnum value) { in_between_mode = value; }
         InBetweenAnimationEnum get_in_between_animation() const { return in_between_mode; }
+
+        void set_edit_mode(EditMode value) { edit_mode = value; }
+        EditMode get_edit_mode() const { return edit_mode; }
+
+        void set_in_edit(bool value) { in_edit=value; }
+        bool is_in_edit() const { return in_edit; } 
+
+        // edit interactions
+        void edit_toggle();
+        void edit_next();
+        void edit_plus(bool big=false);
+        void edit_minus(bool big=false);
+
 
     public:
         void setup();

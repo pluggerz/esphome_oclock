@@ -12,11 +12,15 @@
 
 using namespace oclock;
 
+void update_from_components();
+
 AnimationController animationController;
 
 oclock::Master oclock::master;
 bool scanForError = false;
 int slaveIdCounter = -2;
+
+std::string current_broadcast_request = "None";
 
 byte receiverBufferBytes[RECEIVER_BUFFER_SIZE];
 auto receiverBuffer = Buffer(receiverBufferBytes, RECEIVER_BUFFER_SIZE);
@@ -43,6 +47,7 @@ MasterLifecycle::LoopFunc MasterLifecycle::loopFunc_{};
 
 void oclock::ChannelRequest::send_raw(const UartMessage *msg, const byte length)
 {
+    ESP_LOGI(TAG, "send_raw -> %s (%d bytes)", alias_.c_str(), length);
     uart.send_raw(msg, length);
 }
 
@@ -108,11 +113,11 @@ void MasterLifecycle::change_to_init()
     // all slaves will stop their work and put Sync to low
     uart.send(UartMessage(-1, MsgType::MSG_ID_RESET));
     while (Sync::read() == HIGH)
-        {
-            // wait while slave is high
-            ::delay(200);
-            ESP_LOGI(TAG, "Waiting until slaves put sync LOW...");
-        }
+    {
+        // wait while slave is high
+        ::delay(200);
+        ESP_LOGI(TAG, "Waiting until slaves put sync LOW...");
+    }
     ESP_LOGI(TAG, "Sync is LOW...");
 
     // make sure we are high
@@ -180,8 +185,8 @@ bool processLog(UartLogMessage *msg)
     return true;
 }
 /***
- * 
- * While accepting we expect only to receive MSG_ID_ACCEPT 
+ *
+ * While accepting we expect only to receive MSG_ID_ACCEPT
  */
 void MasterLifecycle::change_to_accepting()
 {
@@ -237,6 +242,7 @@ void MasterLifecycle::change_to_accepting()
         scanForError = true;
         ESP_LOGI(TAG, "change_to_accepting: Sync::read()=%s", Sync::read() ? "HIGH" : "LOW");
 
+        update_from_components();
         change_to_serving();
 
         return true;
@@ -253,6 +259,7 @@ void MasterLifecycle::change_to_accepting()
 
 void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
 {
+    current_broadcast_request = request->get_alias();
 #define FINAL_REQUEST()                       \
     {                                         \
         if (request)                          \
@@ -260,6 +267,7 @@ void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
             request->finalize();              \
             delete request;                   \
         }                                     \
+        current_broadcast_request = "None";   \
         MasterLifecycle::change_to_serving(); \
     }
 
@@ -280,19 +288,37 @@ void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
                 ESP_LOGI(TAG, "Done dumping logs request!");
                 FINAL_REQUEST()
             }
+            else
+            {
+                ESP_LOGI(TAG, "Waiting before umping logs request!");
+            }
+            return true;
+
+        case MsgType::MSG_WAIT_FOR_ANIMATION:
+            if (msg->getDstId() == 0xFF)
+            {
+                ESP_LOGI(TAG, "Done MSG_WAIT_FOR_ANIMATION request! > %d ", msg->getDstId());
+                FINAL_REQUEST()
+            }
+            else
+            {
+                ESP_LOGI(TAG, "Waiting before MSG_WAIT_FOR_ANIMATION request! > %d ", msg->getDstId());
+            }
             return true;
 
         case MsgType::MSG_POS_REQUEST:
         {
             auto pos_msg = reinterpret_cast<const UartPosRequest *>(msg);
             ESP_LOGI(TAG, "Store pos request! %d %d (%d, %d)", msg->getSourceId(), slaveIdCounter, pos_msg->pos0, pos_msg->pos1);
-            animationController.set_handles(msg->getSourceId(),
-                                            pos_msg->pos0,
-                                            pos_msg->pos1);
+            animationController.set_handles(msg->getSourceId(), pos_msg->pos0, pos_msg->pos1);
             if (msg->getDstId() == 0xFF)
             {
-                ESP_LOGI(TAG, "Done retrieving pos request!");
+                ESP_LOGI(TAG, "Done retrieving pos request! > %d ", msg->getDstId());
                 FINAL_REQUEST()
+            }
+            else
+            {
+                ESP_LOGI(TAG, "Waiting before retrieving pos request! > %d ", msg->getDstId());
             }
         }
             return true;
@@ -314,6 +340,15 @@ void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
 }
 
 std::deque<oclock::ExecuteRequest *> open_requests;
+
+void dump_open_requests()
+{
+    ESP_LOGI(TAG, "queue.size: %d (current broad_cast: %s)", open_requests.size(), current_broadcast_request.c_str());
+    for (auto it = open_requests.begin(); it != open_requests.end(); ++it)
+    {
+        ESP_LOGI(TAG, " -- %s", (*it)->get_alias().c_str());
+    }
+}
 
 void MasterLifecycle::change_to_serving()
 {
@@ -339,7 +374,9 @@ void MasterLifecycle::change_to_serving()
         if (!open_requests.empty())
         {
             oclock::ExecuteRequest *request = open_requests.front();
+            ESP_LOGI(TAG, "executing/popped: %s", request->get_alias().c_str());
             open_requests.pop_front();
+            dump_open_requests();
             // execute
             request->execute();
             delete request;
@@ -356,6 +393,11 @@ void oclock::Master::dump_config()
 {
     auto tag = TAG;
     ESP_LOGI(tag, "MASTER:");
+    ESP_LOGI(tag, "  queue.size: %d (current broad_cast: %s)", open_requests.size(), current_broadcast_request.c_str());
+    for (auto it = open_requests.begin(); it != open_requests.end(); ++it)
+    {
+        ESP_LOGI(TAG, "               -- %s", (*it)->get_alias().c_str());
+    }
     ESP_LOGI(tag, "  brightness: %d", brightness_);
     ESP_LOGI(tag, "  time trackers:");
     oclock::time_tracker::realTimeTracker.dump_config(tag);
@@ -370,6 +412,7 @@ void oclock::Master::dump_config()
 void oclock::queue(ExecuteRequest *request)
 {
     open_requests.push_back(request);
+    dump_open_requests();
 }
 
 void oclock::queue(oclock::BroadcastRequest *request)
@@ -379,7 +422,7 @@ void oclock::queue(oclock::BroadcastRequest *request)
         oclock::BroadcastRequest *org_request_;
 
     public:
-        CallbackRequest(oclock::BroadcastRequest *org_request) : org_request_(org_request) {}
+        CallbackRequest(oclock::BroadcastRequest *org_request) : ExecuteRequest(std::string("CallbackRequest+") + org_request->get_alias()), org_request_(org_request) {}
 
         virtual ~CallbackRequest()
         {

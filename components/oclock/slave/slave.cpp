@@ -1,5 +1,10 @@
 #include "oclock.h"
 
+#include "enums.h"
+#include "slave.h"
+
+SlaveSettings slave_settings;
+
 #include "steppers.h"
 #include "steps_executor.h"
 
@@ -50,13 +55,16 @@ LedAsync ledAsync;
 
 // background layers
 BackgroundLedAnimations::Fixed backgroundLedLayer;
-//BackgroundLedAnimations::Fixed offBackgroundLedLayer;
+BackgroundLedAnimations::Fixed speedLedLayer;
+
+// BackgroundLedAnimations::Fixed offBackgroundLedLayer;
 BackgroundLedAnimations::Xmas xmasLedLayer;
 BackgroundLedAnimations::Rainbow rainbowLedLayer;
 
 #include "slave/leds_foreground.h"
 
 FollowHandlesLedLayer followHandlesLedLayer;
+SpeedRelatedLedLayer settingSpeedLayer;
 
 // can work on top of any layer
 // FollowLightLedLayer followLightLedLayer;
@@ -299,9 +307,25 @@ void dump_config()
     stepper1.dump_config(tag);
 }
 
-void do_dump_logs_request(const UartMessage *msg)
+void do_inform_stop_animation()
 {
-    auto alsoConfig = reinterpret_cast<const UartDumpLogsRequest *>(msg)->dump_config;
+    StepExecutors::request_stop();
+}
+
+void do_wait_for_animation()
+{
+    while (StepExecutors::active())
+    {
+        loop();
+    }
+    delay(5); // FIX CRC ERRORS?
+    uart.send(UartWaitUntilAnimationIsDoneRequest(slaveId, nextSlaveId));
+    uart.start_receiving();
+}
+
+void do_dump_logs_request(const UartDumpLogsRequest *msg)
+{
+    auto alsoConfig = msg->dump_config;
     pushLogs();
     if (alsoConfig)
     {
@@ -328,15 +352,20 @@ void do_position_request(const UartMessage *msg)
     auto stepper1Ticks = preMain1.busy() ? Ticks::normalize(-stepper1.get_offset_steps()) : stepper1.ticks();
 
     pushLogs();
+    delay(5); // FIX CRC ERRORS?
     uart.send(UartPosRequest(stop, slaveId, nextSlaveId, stepper0Ticks / STEP_MULTIPLIER, stepper1Ticks / STEP_MULTIPLIER, !busy));
     uart.start_receiving();
 }
 
 void do_led_background_mode_request(const LedModeRequest *msg)
 {
-    const auto &mode = msg->mode;
+    slave_settings.set_background_mode(msg->mode);
+}
 
-    switch (mode % 9)
+void SlaveSettings::set_background_mode(int value)
+{
+    background_mode_ = value % 9;
+    switch (background_mode_)
     {
     case 0:
         backgroundLedLayer.start();
@@ -368,7 +397,13 @@ void do_led_background_mode_request(const LedModeRequest *msg)
 
 void do_led_foreground_mode_request(const LedModeRequest *msg)
 {
-    switch (msg->mode)
+    slave_settings.set_foreground_mode(msg->mode);
+}
+
+void SlaveSettings::set_foreground_mode(int value)
+{
+    foreground_mode_ = value % 3;
+    switch (foreground_mode_)
     {
     case 1:
         ESP_LOGI(TAG, "fg.leds.debugLedLayer");
@@ -377,7 +412,7 @@ void do_led_foreground_mode_request(const LedModeRequest *msg)
 
     case 2:
         ESP_LOGI(TAG, "fg.leds.followHandlesLayer");
-        ledAsync.set_foreground_led_layer(&followHandlesLayer());
+        ledAsync.set_foreground_led_layer(&followHandlesLayer(false));
         return;
 
     case 0:
@@ -396,14 +431,46 @@ void do_led_mode_request(const LedModeRequest *msg)
         do_led_background_mode_request(msg);
 }
 
+void do_settings_mode_request(const SettingsModeRequest *msg)
+{
+    const auto mode = msg->get_mode();
+    switch (mode)
+    {
+    case oclock::EditMode::Speed:
+    case oclock::EditMode::TurnSpeed:
+    case oclock::EditMode::TurnSteps:
+        speedLedLayer.set_color(rgba_color(0xFF, 0xFF, 0xFF));
+        speedLedLayer.start();
+        ledAsync.set_led_layer(&speedLedLayer);
+        settingSpeedLayer.set_mode(mode);
+        ledAsync.set_foreground_led_layer(&settingSpeedLayer);
+        break;
+
+    case oclock::EditMode::Brightness:
+    case oclock::EditMode::Background:
+    default:
+        ledAsync.set_foreground_led_layer(&settingsLedLayer(int(mode)));
+        break;
+    }
+}
+
 void do_color_request(const UartColorMessage *msg)
 {
     backgroundLedLayer.set_color(rgba_color(msg->red, msg->green, msg->blue));
 }
 
-void do_brightness_request(const UartBrightnessMessage *msg)
+void do_brightness_request(const UartScaledBrightnessMessage *msg)
 {
-    ledAsync.set_brightness(msg->brightness);
+    slave_settings.set_scaled_brightness(msg->scaled_brightness);
+}
+
+void SlaveSettings::set_scaled_brightness(int value)
+{
+    if (scaled_brightness_ == value)
+        return;
+
+    scaled_brightness_ = value;
+    ledAsync.updateLeds();
 }
 
 auto uartMainListener = [](const UartMessage *msg)
@@ -411,7 +478,7 @@ auto uartMainListener = [](const UartMessage *msg)
     switch (msg->getMessageType())
     {
     case MsgType::MSG_BRIGHTNESS:
-        do_brightness_request(reinterpret_cast<const UartBrightnessMessage *>(msg));
+        do_brightness_request(reinterpret_cast<const UartScaledBrightnessMessage *>(msg));
         return true;
 
     case MsgType::MSG_BOOL_DEBUG_LED_LAYER:
@@ -446,11 +513,23 @@ auto uartMainListener = [](const UartMessage *msg)
         return true;
 
     case MSG_DUMP_LOG_REQUEST:
-        do_dump_logs_request(msg);
+        do_dump_logs_request(reinterpret_cast<const UartDumpLogsRequest *>(msg));
+        return true;
+
+    case MSG_WAIT_FOR_ANIMATION:
+        do_wait_for_animation();
+        return true;
+
+    case MSG_INFORM_STOP_ANIMATION:
+        do_inform_stop_animation();
         return true;
 
     case MSG_LED_MODE:
         do_led_mode_request(reinterpret_cast<const LedModeRequest *>(msg));
+        return true;
+
+    case MSG_SETTINGS_MODE:
+        do_settings_mode_request(reinterpret_cast<const SettingsModeRequest *>(msg));
         return true;
 
     default:

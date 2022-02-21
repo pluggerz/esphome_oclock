@@ -1,12 +1,12 @@
-from esphome.const import CONF_BAUD_RATE, CONF_BLUE, CONF_BRIGHTNESS, CONF_DEVICE_CLASS, CONF_DISABLED_BY_DEFAULT, CONF_GREEN, CONF_ID, CONF_INITIAL_VALUE, CONF_LIGHT, CONF_LOGGER, CONF_MAX_VALUE, CONF_MIN_VALUE, CONF_NAME, CONF_RED, CONF_STEP, CONF_TYPE, CONF_WHILE
+import imp
+from esphome.const import CONF_BAUD_RATE, CONF_BLUE, CONF_BRIGHTNESS, CONF_DISABLED_BY_DEFAULT, CONF_GREEN, CONF_ID, CONF_INITIAL_VALUE, CONF_LIGHT, CONF_LOGGER, CONF_MAX_VALUE, CONF_MIN_VALUE, CONF_NAME, CONF_RED, CONF_STEP, CONF_TYPE, CONF_WHILE
 from esphome.core import CORE
 from esphome import core
 from esphome.voluptuous_schema import _Schema
-from esphome.components import time, switch, number, output
-from esphome.components.template import select
+from esphome.components import time, switch, number, output, select, text_sensor
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.cpp_generator import MockObj, Pvariable
+from esphome.cpp_generator import Pvariable
 
 
 CONF_TIME_ID = "time_id"
@@ -76,15 +76,15 @@ def cv_slaves_check(conf):
     return d
 
 
-BRIGHTNESS_SCHEMA = number.NUMBER_SCHEMA.extend(cv.COMPONENT_SCHEMA).extend(
-    {
-        cv.GenerateID(): cv.declare_id(NumberControl),
-        cv.Optional(CONF_NAME, default="brightness"): cv.string_strict,
-        cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
-        cv.Optional(CONF_MAX_VALUE, default=31): cv.float_,
-        cv.Optional(CONF_STEP, default=1): cv.float_,
-        cv.Optional(CONF_INITIAL_VALUE, default=16): cv.float_,
-    })
+# BRIGHTNESS_SCHEMA = number.NUMBER_SCHEMA.extend(cv.COMPONENT_SCHEMA).extend(
+#    {
+#        cv.GenerateID(): cv.declare_id(NumberControl),
+#        cv.Optional(CONF_NAME, default="brightness"): cv.string_strict,
+#        cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
+#        cv.Optional(CONF_MAX_VALUE, default=31): cv.float_,
+#        cv.Optional(CONF_STEP, default=1): cv.float_,
+#        cv.Optional(CONF_INITIAL_VALUE, default=16): cv.float_,
+#    })
 
 LIGHT_SCHEMA = output.FLOAT_OUTPUT_SCHEMA.extend(
     {
@@ -95,7 +95,18 @@ RGBLIGHT_SCHEMA = cv.All({
     cv.Required(CONF_RED): LIGHT_SCHEMA,
     cv.Required(CONF_GREEN): LIGHT_SCHEMA,
     cv.Required(CONF_BLUE): LIGHT_SCHEMA,
-    cv.Required(CONF_BRIGHTNESS): LIGHT_SCHEMA,
+})
+
+COMPONENTS_SCHEMA = cv.All({
+    cv.Required('active_mode'): cv.use_id(select.Select),
+    cv.Required('handles_animation'): cv.use_id(select.Select),
+    cv.Required('distance_calculator'): cv.use_id(select.Select),
+    cv.Required('inbetween_animation'): cv.use_id(select.Select),
+    cv.Required('foreground'): cv.use_id(select.Select),
+    cv.Required('background'): cv.use_id(select.Select),
+    cv.Required(CONF_BRIGHTNESS):  cv.use_id(number.Number),
+    cv.Required('speed'):  cv.use_id(number.Number),
+    cv.Required('text'):  cv.use_id(text_sensor.TextSensor),
 })
 
 CONFIG_SCHEMA = _Schema(
@@ -103,8 +114,11 @@ CONFIG_SCHEMA = _Schema(
         cv.GenerateID(): cv.declare_id(OClockStubController),
         cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
         cv.Optional(CONF_COUNT_START, -1): cv.int_range(min=-1, max=64),
+        cv.Optional('turn_speed', 4): cv.int_range(min=0, max=8),
+        cv.Optional('turn_steps', 10): cv.int_range(min=0, max=90),
         cv.Required(CONF_SLAVES): cv_slaves_check,
-        cv.Optional(CONF_BRIGHTNESS, default={}): BRIGHTNESS_SCHEMA,
+        cv.Required('components'): COMPONENTS_SCHEMA,
+        # cv.Optional(CONF_BRIGHTNESS, default={}): BRIGHTNESS_SCHEMA,
         cv.Required(CONF_LIGHT): RGBLIGHT_SCHEMA,
     }
 )
@@ -175,11 +189,7 @@ async def to_code(config):
                         cg.RawExpression(
                             "[](float value){ oclock::requests::background_color(2, value); }")
                         )
-    await to_code_light(ligthConf[CONF_BRIGHTNESS],
-                        cg.RawExpression(
-                            "[](float value){ oclock::requests::background_brightness(value); }")
-                        )
-    
+
     # https://github.com/esphome/AsyncTCP/blob/master/library.json
     cg.add_library(name="apa102-arduino", version=None,
                    repository="pluggerz/apa102-arduino.git")
@@ -200,8 +210,6 @@ async def to_code(config):
     await cg_add_switch("oclock_speed_check064", cg.RawExpression("new oclock::SpeedCheckSwitch64()"))
     await cg_add_switch("oclock_speed_adapt", cg.RawExpression("new oclock::SpeedAdaptTestSwitch()"))
 
-    await cg_add_switch("oclock_save", cg.RawExpression("new oclock::SavePreferencesSwitch()"))
-    
     await cg_add_switch("oclock_reset", cg.RawExpression("new oclock::ResetSwitch()"))
     await cg_add_switch("oclock_6_positon", cg.RawExpression("new oclock::SixPositionSwitch()"))
     await cg_add_switch("oclock_0_positon", cg.RawExpression("new oclock::ZeroPositionSwitch()"))
@@ -210,16 +218,33 @@ async def to_code(config):
     await cg_add_switch("oclock_dump_config", cg.RawExpression("new oclock::DumpConfigSwitch()"))
     await cg_add_switch("oclock_dump_config_slaves", cg.RawExpression("new oclock::DumpConfigSlavesSwitch()"))
 
-    cg.add(cg.RawExpression("new oclock::TurnSpeedControl();"));
-    cg.add(cg.RawExpression("new oclock::TurnStepsControl();"));
-    cg.add(cg.RawExpression("new oclock::ActiveModeSelect();"));
-    cg.add(cg.RawExpression("new oclock::TestMinuteControl();"));
-    cg.add(cg.RawExpression("new oclock::TestHourControl();"));
-    cg.add(cg.RawExpression("new oclock::SpeedControl();"));
-    cg.add(cg.RawExpression("new oclock::BackgroundModeSelect();"));
-    cg.add(cg.RawExpression("new oclock::ForegroundModeSelect();"));
-    cg.add(cg.RawExpression("new oclock::HandlesInBetweenAnimationModeSelect();"));
-    cg.add(cg.RawExpression("new oclock::HandlesDistanceModeSelect();"));
-    cg.add(cg.RawExpression("new oclock::HandlesAnimationModeSelect();"));
+    turn_speed=config['turn_speed']
+    expression=f"Instructions::turn_speed={turn_speed};"
+    cg.add(cg.RawExpression(expression))
+    print(expression)
 
+    turn_steps=config['turn_steps']
+    expression=f"Instructions::turn_steps={turn_steps};"
+    cg.add(cg.RawExpression(expression))
+    print(expression)
+  
+    components = config['components']
+
+    def define_component(field):
+        cg.add(cg.RawExpression(
+            f"oclock::esp_components.{field}={components[field]};"))
+    for component in {
+        'handles_animation',
+        'active_mode',
+        'distance_calculator',
+        'inbetween_animation',
+        'background',
+        'foreground',
+        'brightness',
+        'speed',
+        'text'
+        }:
+        define_component(component)
+
+    
     await cg.register_component(var, config)

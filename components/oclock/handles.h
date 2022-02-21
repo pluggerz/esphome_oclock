@@ -94,6 +94,14 @@ public:
 class ClockUtil
 {
 private:
+
+       static const ClockCharacter *from_character(char ch)
+    {
+        if (ch >= '0' && ch <= '9')
+            return fromNumber(ch - '0');
+        return &EMPTY;
+    }
+
        static const ClockCharacter *fromNumber(int nmbr)
     {
         return nmbr < 0 || nmbr > 9 ? &EMPTY : NMBRS[nmbr];
@@ -145,6 +153,11 @@ private:
     //}
 
 public:
+    static ClockCharacters retrieveClockCharactersfromCharacters(char ch0, char ch1, char ch2, char ch3)
+    {
+        return ClockCharacters(from_character(ch0), from_character(ch1), from_character(ch2), from_character(ch3));
+    }
+
     static ClockCharacters retrieveClockCharactersfromNumbers(int n0, int n1, int n2, int n3)
     {
         return ClockCharacters(fromNumber(n0), fromNumber(n1), fromNumber(n2), fromNumber(n3));

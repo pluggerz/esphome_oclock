@@ -14,13 +14,14 @@ namespace oclock
 {
     namespace requests
     {
+        void publish_brightness(const int value);
 
-        void background_brightness(const float value);
         void background_color(const int component, const float value);
 
         class AnimationRequest : public oclock::BroadcastRequest
         {
         protected:
+            AnimationRequest() : BroadcastRequest("AnimationRequest") {}
             void sendCommandsForHandle(int animatorHandleId, const std::vector<DeflatedCmdKey> &commands)
             {
                 auto physicalHandleId = animationController.mapAnimatorHandle2PhysicalHandleId(animatorHandleId);
@@ -176,7 +177,7 @@ namespace oclock
                 // finalize
                 send(UartEndKeysMessage(
                     instructions.turn_speed,
-                    instructions.turn_speed_steps,
+                    instructions.turn_steps,
                     cmdSpeedUtil.get_speeds(),
                     instructions.get_speed_detection(),
                     millisLeft));
@@ -213,7 +214,7 @@ namespace oclock
                 Instructions instructions;
                 // lower turn speed so we can actually spot it
                 instructions.turn_speed = 8;
-                instructions.turn_speed_steps = 5;
+                instructions.turn_steps = 5;
                 instructions.set_detect_speed_change(20 * 2 + 0, true);
                 instructions.set_detect_speed_change(20 * 2 + 1, true);
 
@@ -226,9 +227,9 @@ namespace oclock
                         instructions.add(22 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed));
                         instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 90, speed));
                         instructions.add(22 * 2 + handle_id, DeflatedCmdKey(ANTI_CLOCKWISE | RELATIVE, 90, speed));
-                        //instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 60, speed));
-                        //instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 60, speed));
-                        //instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 60, speed));
+                        // instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 60, speed));
+                        // instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 60, speed));
+                        // instructions.add(20 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE | GHOST, 60, speed));
                     }
                     instructions.add(20 * 2 + handle_id, DeflatedCmdKey(ANTI_CLOCKWISE | RELATIVE, 360, speed));
                     instructions.add(22 * 2 + handle_id, DeflatedCmdKey(CLOCKWISE | RELATIVE, 360, speed));
@@ -270,7 +271,7 @@ namespace oclock
                     instructions.add(20 * 2 + 0, DeflatedCmdKey(GHOST | ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
                     instructions.add(20 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
                     instructions.add(20 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
-                    
+
 
                     instructions.swap_speed_detection = false;
                     instructions.add(20 * 2 + 1, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, speed));
@@ -282,11 +283,11 @@ namespace oclock
                     */
                     // instructions.add(20 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
 
-                    //instructions.swap_speed_detection = false;
-                    //instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
-                    //instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
+                    // instructions.swap_speed_detection = false;
+                    // instructions.add(22 * 2 + 0, DeflatedCmdKey(CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
+                    // instructions.add(22 * 2 + 0, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 360, 16));
 
-                    //instructions.add(22 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
+                    // instructions.add(22 * 2 + 1, DeflatedCmdKey(ANTI_CLOCKWISE | CmdEnum::RELATIVE, 720, 16));
                 }
 
                 sendInstructions(instructions);
@@ -376,10 +377,11 @@ namespace oclock
             };
         };
 
-        class ZeroPosition final : public AnimationRequest 
+        class ZeroPosition final : public AnimationRequest
         {
             const int position;
-            public:
+
+        public:
             ZeroPosition(int positon) : position(positon) {}
             virtual void finalize() override final
             {
@@ -388,17 +390,16 @@ namespace oclock
 
                 Instructions instructions;
                 auto speed = oclock::master.get_base_speed();
-                auto distanceCalculator=DistanceCalculators::clockwise;
+                auto distanceCalculator = DistanceCalculators::clockwise;
                 HandlesAnimations::instruct_using_swipe(instructions, speed, goal, distanceCalculator);
 
                 sendInstructions(instructions, 1);
             }
-
         };
 
         class TrackTimeRequest final : public AnimationRequest
         {
-            const oclock::time_tracker::TimeTracker &tracker;
+            const oclock::time_tracker::TextTracker &tracker;
 
             DistanceCalculators::Func selectDistanceCalculator()
             {
@@ -457,18 +458,15 @@ namespace oclock
             }
 
         public:
-            TrackTimeRequest(const oclock::time_tracker::TimeTracker &tracker) : tracker(tracker) {}
+            TrackTimeRequest(const oclock::time_tracker::TextTracker &tracker) : tracker(tracker) {}
 
             virtual void finalize() override final
             {
-                ESP_LOGI(TAG, "do_track_time -> follow up");
-
-                auto now = tracker.now();
-                auto hour = now.hour;
-                auto minute = now.minute;
+                auto text = tracker.to_text();
+                ESP_LOGI(TAG, "do_track_time -> follow up: [%c %c %c %c]", text.ch0, text.ch1, text.ch2, text.ch3);
 
                 // get characters
-                auto clockChars = ClockUtil::retrieveClockCharactersfromDigitalTime(hour, minute);
+                auto clockChars = ClockUtil::retrieveClockCharactersfromCharacters(text.ch0, text.ch1, text.ch2, text.ch3);
 
                 HandlesState goal;
                 copyTo(clockChars, goal);
@@ -483,7 +481,6 @@ namespace oclock
                                 // oke move to 12:00
                                 goal.set_ticks(handle_id, 0);
                         });
-                
 
                 // final animation
 
@@ -497,9 +494,9 @@ namespace oclock
                 selectInBetweenAnimation()(instructions, speed);
                 selectFinalAnimator()(instructions, speed, goal, distanceCalculator);
 
-                // lets wait for all... 
+                // lets wait for all...
                 InBetweenAnimations::instructDelayUntilAllAreReady(instructions, 32);
-                float millis_left = 1000.0f * (60.0f - tracker.now().second) / float(tracker.get_speed_multiplier());
+                float millis_left = text.millis_left;
                 ESP_LOGI(TAG, "millis_left: %f", millis_left);
                 if (act_as_second_handle)
                     instructions.iterate_handle_ids(
@@ -518,7 +515,7 @@ namespace oclock
             const bool stop_;
 
         public:
-            PositionRequest(bool stop) : stop_(stop) {}
+            PositionRequest(bool stop) : BroadcastRequest("PositionRequest"), stop_(stop) {}
 
             virtual void execute() override final
             {
@@ -527,10 +524,23 @@ namespace oclock
             }
         };
 
+        class EnterSettingsMode final : public oclock::ExecuteRequest
+        {
+            const oclock::EditMode mode;
+
+        public:
+            EnterSettingsMode(oclock::EditMode mode) : ExecuteRequest("EnterSettingsMode"), mode(mode) {}
+
+            virtual void execute() override final
+            {
+                send(SettingsModeRequest(mode));
+            }
+        };
+
         class BackgroundModeSelectRequest final : public oclock::ExecuteRequest
         {
         public:
-            BackgroundModeSelectRequest(int mode)
+            BackgroundModeSelectRequest(int mode) : ExecuteRequest("BackgroundModeSelectRequest")
             {
                 oclock::master.set_led_background_mode(mode);
             }
@@ -546,7 +556,7 @@ namespace oclock
         class ForegroundModeSelectRequest final : public oclock::ExecuteRequest
         {
         public:
-            ForegroundModeSelectRequest(int mode)
+            ForegroundModeSelectRequest(int mode) : ExecuteRequest("ForegroundModeSelectRequest")
             {
                 oclock::master.set_led_foreground_mode(mode);
             }
@@ -559,12 +569,27 @@ namespace oclock
             }
         };
 
+        class WaitUntilAnimationIsDoneRequest : public BroadcastRequest
+        {
+        public:
+            virtual void execute() override final
+            {
+                // inform that we will stop
+                send(UartInformToStopAnimationRequest());
+                // wait until stopped
+                send(UartWaitUntilAnimationIsDoneRequest());
+            }
+
+        public:
+            WaitUntilAnimationIsDoneRequest() : BroadcastRequest("WaitUntilAnimationIsDoneRequest") {}
+        };
+
         class DumpSlaveLogsRequest : public BroadcastRequest
         {
             const bool also_config_;
 
         public:
-            DumpSlaveLogsRequest(bool also_config) : also_config_(also_config) {}
+            DumpSlaveLogsRequest(bool also_config) : BroadcastRequest("DumpSlaveLogsRequest"), also_config_(also_config) {}
             virtual void execute() override final
             {
                 send(UartDumpLogsRequest(also_config_));

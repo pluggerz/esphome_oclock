@@ -1,27 +1,5 @@
 #include "steps_executor.h"
 
-/*
-class SpecialFuncs
-{
-    static void followSeconds(Micros now){
-
-    };
-};
-
-class SpecialExecutor
-{
-public:
-    virtual void loop(Micros now) = 0;
-};
-
-class FollowSecondExecutor : public SpecialExecutor
-{
-    bool discrete;
-    virtual void loop(Micros now)   {
-        
-    }
-} followSecondExecutor;*/
-
 class AnimationKeys
 {
 private:
@@ -30,9 +8,9 @@ private:
     uint8_t idx = 0;
 
 public:
-    void clear()
+    void clear(uint8_t new_idx = 0)
     {
-        idx = 0;
+        idx = new_idx;
     }
 
     const InflatedCmdKey &operator[](int idx) const
@@ -80,8 +58,23 @@ public:
     bool speed_detection = false;
     bool speed_up = false;
     bool speed_down = false;
+    bool request_stop_ = false;
     // follow goal should be factored out...
-    int follow_goal = -1; 
+    int follow_goal = -1;
+
+    void request_stop()
+    {
+        request_stop_ = true;
+        if (keysPtr == nullptr || special)
+        {
+            keysPtr = nullptr;
+            return;
+        }
+        if (speed_up == false && speed_down == false)
+        {
+            steps = 0;
+        }
+    }
 
     void followSeconds(Micros now, bool discrete)
     {
@@ -149,7 +142,7 @@ public:
             // the stepper is 'not stepping'
             return false;
 
-        if (idx + 1 >= MAX_ANIMATION_KEYS)
+        if (idx + 1 >= MAX_ANIMATION_KEYS || request_stop_)
         {
             // last command, so lets check if we need to slow down
             return fast_enough(cur_speed);
@@ -190,7 +183,6 @@ public:
             }
             else
             {
-
                 // still to do some work
                 if (stepper.tryToStep(now))
                 {
@@ -219,6 +211,12 @@ public:
         const auto clockwise = cmd.clockwise();
         if (turning == 0)
         {
+            if (request_stop_)
+            {
+                // we are done!
+                keysPtr = nullptr;
+                return;
+            }
             speed_up = do_speed_up();
             speed_down = do_speed_down();
 #define STEPS keys[idx].value.steps
@@ -295,6 +293,11 @@ public:
         keysPtr = nullptr;
     }
 
+    bool active() const
+    {
+        return keysPtr != nullptr;
+    }
+
     void start(AnimationKeys *keys, Millis millisLeft, bool speed_detection)
     {
         this->keysPtr = keys;
@@ -304,9 +307,10 @@ public:
         this->special = false;
         this->steps = 0;
         this->turning = 0;
-        this->speed_down = 0;
+        this->speed_down = false;
         this->speed_up = false;
         this->speed_detection = speed_detection;
+        this->request_stop_ = false;
 
         stepperPtr->sync();
     }
@@ -348,7 +352,7 @@ void StepExecutors::process_end_keys(int slave_id, const UartEndKeysMessage *msg
     stepper0.speed_up = true;
     stepper1.speed_up = true;
 
-    reverse_steps = msg->turn_speed_steps;
+    reverse_steps = msg->turn_steps;
 
     stepper0.turn_speed_in_revs_per_minute = msg->turn_speed;
     stepper1.turn_speed_in_revs_per_minute = msg->turn_speed;
@@ -369,4 +373,15 @@ void StepExecutors::loop(Micros now)
 {
     animator0.loop(now);
     animator1.loop(now);
+}
+
+void StepExecutors::request_stop()
+{
+    animator0.request_stop();
+    animator1.request_stop();
+}
+
+bool StepExecutors::active()
+{
+    return animator0.active() || animator1.active();
 }

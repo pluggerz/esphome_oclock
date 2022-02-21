@@ -25,38 +25,38 @@ public:
         return _size;
     }
 
-    uint16_t &operator[](int idx) 
+    uint16_t &operator[](int idx)
     {
         return cmds[idx];
     }
 
-    const uint16_t &operator[](int idx) const 
+    const uint16_t &operator[](int idx) const
     {
         return cmds[idx];
     }
 } __attribute__((packed, aligned(1)));
 
 /***
- * 
+ *
  * Essentially every minute we send animation keys.
  * Some type of animations depends on the seconds.
  * Ideally, a minute has 60 seconds, but some time could be lost in prepping.
- * So, this message will give the actual minute. 
+ * So, this message will give the actual minute.
  * Or at least the time when the master will probability send the next instructions.
  */
 struct UartEndKeysMessage : public UartMessage
 {
 public:
     uint32_t number_of_millis_left;
-    uint8_t turn_speed, turn_speed_steps;
+    uint8_t turn_speed, turn_steps;
     uint8_t speed_map[8];
     uint64_t speed_detection;
 
-    UartEndKeysMessage(const uint8_t turn_speed, const uint8_t turn_speed_steps, const uint8_t (&speed_map)[8], uint64_t _speed_detection, uint32_t number_of_millis_left)
+    UartEndKeysMessage(const uint8_t turn_speed, const uint8_t turn_steps, const uint8_t (&speed_map)[8], uint64_t _speed_detection, uint32_t number_of_millis_left)
         : UartMessage(-1, MSG_END_KEYS, ALL_SLAVES),
           number_of_millis_left(number_of_millis_left),
           turn_speed(turn_speed),
-          turn_speed_steps(turn_speed_steps),
+          turn_steps(turn_steps),
           speed_detection(_speed_detection)
     {
         for (int idx = 0; idx < 8; ++idx)

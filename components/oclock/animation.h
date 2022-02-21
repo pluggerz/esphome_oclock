@@ -205,8 +205,8 @@ public:
         DRAW_ROW(4);
         DRAW_ROW2(4);
 #undef DRAW_ROW
-        //INFO("visibilityFlags: " << std::bitset<MAX_HANDLES>(visibilityFlags.raw()));
-        //INFO("nonOverlappingFlags: " << std::bitset<MAX_HANDLES>(nonOverlappingFlags.raw()));
+        // INFO("visibilityFlags: " << std::bitset<MAX_HANDLES>(visibilityFlags.raw()));
+        // INFO("nonOverlappingFlags: " << std::bitset<MAX_HANDLES>(nonOverlappingFlags.raw()));
     }
 
     void copyFrom(const HandlesState &src)
@@ -246,7 +246,7 @@ public:
     std::vector<HandleCmd> cmds;
     uint64_t speed_detection{~uint64_t(0)};
     static int turn_speed;
-    static int turn_speed_steps;
+    static int turn_steps;
 
     void iterate_handle_ids(std::function<void(int handle_id)> func)
     {
@@ -295,8 +295,7 @@ public:
         std::for_each(cmds.begin(), cmds.end(), [firstHandleId, secondHandleId](HandleCmd &cmd)
                       {
                           if (cmd.handleId == firstHandleId || cmd.handleId == secondHandleId)
-                              cmd.handleId = -1;
-                      });
+                              cmd.handleId = -1; });
     }
 
     void rejectInstructions(int handleId)
