@@ -25,12 +25,12 @@ public:
         return _size;
     }
 
-    uint16_t &operator[](int idx)
+    void set_key(int idx, uint16_t value)
     {
-        return cmds[idx];
+        cmds[idx] = value;
     }
 
-    const uint16_t &operator[](int idx) const
+    uint16_t get_key(int idx) const
     {
         return cmds[idx];
     }

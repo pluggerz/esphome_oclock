@@ -48,7 +48,7 @@ public:
     void addAll(const UartKeysMessage &msg)
     {
         for (int i = 0; i < msg.size(); ++i)
-            cmds[idx++] = InflatedCmdKey::map(msg[i]);
+            cmds[idx++] = InflatedCmdKey(msg.get_key(i));
     }
 };
 

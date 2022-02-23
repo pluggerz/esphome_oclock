@@ -2,7 +2,6 @@
 
 #include <functional>
 
-
 #define UNUSED_OFFSET 13
 
 class ClockHandles
@@ -44,7 +43,7 @@ public:
     }
 
     ClockHandleRow(int8_t leftShort, int8_t leftLong, int8_t rightShort, int8_t rightLong)
-        : handles({ClockHandles(leftShort, leftLong), ClockHandles(rightShort, rightLong)}) {}
+        : handles{ClockHandles(leftShort, leftLong), ClockHandles(rightShort, rightLong)} {}
 };
 
 class ClockCharacter
@@ -53,7 +52,7 @@ public:
     const ClockHandleRow rows[3];
 
     ClockCharacter(const ClockHandleRow &row0, const ClockHandleRow &row1, const ClockHandleRow &row2)
-        : rows({row0, row1, row2}) {}
+        : rows{row0, row1, row2} {}
 
     const ClockHandleRow &operator[](int idx) const
     {
@@ -94,15 +93,14 @@ public:
 class ClockUtil
 {
 private:
-
-       static const ClockCharacter *from_character(char ch)
+    static const ClockCharacter *from_character(char ch)
     {
         if (ch >= '0' && ch <= '9')
             return fromNumber(ch - '0');
         return &EMPTY;
     }
 
-       static const ClockCharacter *fromNumber(int nmbr)
+    static const ClockCharacter *fromNumber(int nmbr)
     {
         return nmbr < 0 || nmbr > 9 ? &EMPTY : NMBRS[nmbr];
     }
@@ -148,9 +146,9 @@ private:
         b = c;
     }
 
-    //static void mapToPhyscial(uint8_t*handles) {
-    //  swap(handles[0], handles[1]);
-    //}
+    // static void mapToPhyscial(uint8_t*handles) {
+    //   swap(handles[0], handles[1]);
+    // }
 
 public:
     static ClockCharacters retrieveClockCharactersfromCharacters(char ch0, char ch1, char ch2, char ch3)

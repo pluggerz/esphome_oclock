@@ -53,6 +53,11 @@ union InflatedCmdKey
         raw = 0;
     }
 
+    explicit InflatedCmdKey(uint16_t _raw)
+    {
+        raw = _raw;
+    }
+
 #ifdef ESP8266
     void dump(const char *extra) const
     {

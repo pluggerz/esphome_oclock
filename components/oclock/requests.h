@@ -35,7 +35,7 @@ namespace oclock
                 UartKeysMessage msg(physicalHandleId, (u8)nmbrOfCommands);
                 for (std::size_t idx = 0; idx < nmbrOfCommands; ++idx)
                 {
-                    msg[idx] = commands[idx].asInflatedCmdKey().raw;
+                    msg.set_key(idx, commands[idx].asInflatedCmdKey().raw);
                 }
 
                 if (true)
@@ -47,7 +47,7 @@ namespace oclock
                     {
                         for (std::size_t idx = 0; idx < nmbrOfCommands; ++idx)
                         {
-                            const auto &cmd = InflatedCmdKey::map(msg[idx]);
+                            const auto cmd = InflatedCmdKey(msg.get_key(idx));
                             if (cmd.extended())
                             {
                                 const auto extended_cmd = cmd.steps();
@@ -125,7 +125,7 @@ namespace oclock
                     }
                 };
                 ClockUtil::iterate_handles(chars, lambda);
-                for (int handleId = 0; handleId < MAX_HANDLES; handleId++)
+                for (int handleId = 0; handleId < MAX_HANDLES - 1; handleId++)
                 {
                     if (state[handleId] == state[handleId + 1])
                         state.nonOverlappingFlags.hide(handleId);
