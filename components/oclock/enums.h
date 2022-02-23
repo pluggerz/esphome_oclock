@@ -68,7 +68,8 @@ namespace oclock
     enum class EditMode
     {
         None = -1,
-        Brightness = 0,
+        First = 0,
+        Brightness = First,
         Background,
         BackgroundColor,
         Speed,
@@ -238,7 +239,7 @@ namespace oclock
         int asH() const
         {
             float r = red / 255., g = green / 255., b = blue / 255.;
-            float h, s, v;
+            float h = 0.0, s = 0.0, v = 0.0;
             RGBtoHSV(r, g, b, h, s, v);
             return h;
         }

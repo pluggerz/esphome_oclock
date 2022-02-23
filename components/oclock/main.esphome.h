@@ -11,7 +11,6 @@
 
 namespace oclock
 {
- 
 
     class LighFloatOutput : public output::FloatOutput
     {
@@ -65,7 +64,6 @@ namespace oclock
         }
     };
 
-  
     class NumberControl final : public number::Number, public Component
     {
         typedef std::function<void(int value)> Listener;
@@ -109,6 +107,7 @@ namespace oclock
         virtual void write_state(bool state) override
         {
             publish_state(false);
+            oclock::queue(new requests::WaitUntilAnimationIsDoneRequest());
             oclock::queue(new requests::ZeroPosition(0));
             AsyncRegister::byName("time_tracker", nullptr);
         }
@@ -120,6 +119,7 @@ namespace oclock
         virtual void write_state(bool state) override
         {
             publish_state(false);
+            oclock::queue(new requests::WaitUntilAnimationIsDoneRequest());
             oclock::queue(new requests::ZeroPosition(NUMBER_OF_STEPS / 2));
             AsyncRegister::byName("time_tracker", nullptr);
         }
@@ -198,7 +198,7 @@ namespace oclock
     class EspComponents
     {
     public:
-        text_sensor::TextSensor* text{nullptr};
+        text_sensor::TextSensor *text{nullptr};
         select::Select *active_mode{nullptr};
         select::Select *handles_animation{nullptr};
         select::Select *distance_calculator{nullptr};
@@ -209,6 +209,6 @@ namespace oclock
         number::Number *speed{nullptr};
         number::Number *turn_speed{nullptr};
         number::Number *turn_steps{nullptr};
-
+        light::LightState *light{nullptr};
     } extern esp_components;
 }

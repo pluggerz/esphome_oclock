@@ -3,7 +3,7 @@ from esphome.const import CONF_BAUD_RATE, CONF_BLUE, CONF_BRIGHTNESS, CONF_DISAB
 from esphome.core import CORE
 from esphome import core
 from esphome.voluptuous_schema import _Schema
-from esphome.components import time, switch, number, output, select, text_sensor
+from esphome.components import time, switch, number, output, select, text_sensor, light
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.cpp_generator import Pvariable
@@ -107,6 +107,7 @@ COMPONENTS_SCHEMA = cv.All({
     cv.Required(CONF_BRIGHTNESS):  cv.use_id(number.Number),
     cv.Required('speed'):  cv.use_id(number.Number),
     cv.Required('text'):  cv.use_id(text_sensor.TextSensor),
+    cv.Required('light'):  cv.use_id(light.LightState),
 })
 
 CONFIG_SCHEMA = _Schema(
@@ -114,6 +115,7 @@ CONFIG_SCHEMA = _Schema(
         cv.GenerateID(): cv.declare_id(OClockStubController),
         cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
         cv.Optional(CONF_COUNT_START, -1): cv.int_range(min=-1, max=64),
+        cv.Optional('baud_rate', 1200): cv.int_range(min=1200),
         cv.Optional('turn_speed', 4): cv.int_range(min=0, max=8),
         cv.Optional('turn_steps', 10): cv.int_range(min=0, max=90),
         cv.Required(CONF_SLAVES): cv_slaves_check,
@@ -223,6 +225,12 @@ async def to_code(config):
     cg.add(cg.RawExpression(expression))
     print(expression)
 
+    baud_rate=config['baud_rate']
+    expression=f"oclock::master.set_baud_rate({baud_rate});"
+    cg.add(cg.RawExpression(expression))
+    print(expression)
+
+
     turn_steps=config['turn_steps']
     expression=f"Instructions::turn_steps={turn_steps};"
     cg.add(cg.RawExpression(expression))
@@ -242,7 +250,8 @@ async def to_code(config):
         'foreground',
         'brightness',
         'speed',
-        'text'
+        'text',
+        'light',
         }:
         define_component(component)
 

@@ -204,7 +204,6 @@ bool Protocol::update()
         byte inByte = Serial.read();
         switch (inByte)
         {
-
         case STX: // start of text
             ESP_LOGD(TAG, "RS485: STX  (E=%ld)", errorCount_);
             haveSTX_ = true;
@@ -306,7 +305,7 @@ void Channel::start_receiving()
     if (receiving)
         return;
 
-    ESP_LOGD(TAG, "receiving = true");
+    ESP_LOGD(TAG, "receiving=T");
 
     // make sure we are done with sending
     Serial.flush();
@@ -321,7 +320,7 @@ void Channel::start_receiving()
 void Channel::start_transmitting()
 {
     // delay(10);
-    ESP_LOGD(TAG, "receiving = false");
+    ESP_LOGD(TAG, "receiving=F");
 
     gate.start_transmitting();
 
@@ -341,27 +340,41 @@ void Channel::_send(const byte *bytes, const byte length)
     protocol_->sendMsg(bytes, length);
 }
 
+void Channel::upgrade_baud_rate(uint32_t value)
+{
+    if (baud_rate == value)
+        return;
+
+    Serial.end();
+    ESP_LOGI(TAG, "UP: %ld -> %ld baud", baud_rate, value);
+    baud_rate = value;
+
+    Serial.begin(baud_rate);
+    protocol_->reset();
+
+    start_transmitting();
+}
+
 void Channel::setup()
 {
     gate.setup();
 
-    Serial.begin(speed);
+    Serial.begin(baud_rate);
     protocol_->begin();
 
     // initially we always listen
     start_receiving();
 
-    ESP_LOGI(TAG, "setup: %ld baud", speed);
+    ESP_LOGI(TAG, "setup: %ld baud", baud_rate);
 }
 
 void Channel::dump_config(const char *tag)
 {
-    ESP_LOGI(tag, " channel:");
-    ESP_LOGI(tag, "    speed: %ld baud", speed);
-    ESP_LOGI(tag, "    gate:");
+    ESP_LOGI(tag, " channel(%ld baud):", baud_rate);
+    ESP_LOGI(tag, "  gate:");
     gate.dump_config(tag);
-    ESP_LOGI(tag, "    receiving: %s", receiving ? "true" : "false");
-    ESP_LOGI(tag, "    protocol.errorCount_: %ld", protocol_->errorCount_);
+    ESP_LOGI(tag, "  receiving: %s", receiving ? "T" : "F");
+    ESP_LOGI(tag, "  # errors: %ld", protocol_->errorCount_);
 }
 
 void Channel::loop()

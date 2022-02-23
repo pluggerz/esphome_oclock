@@ -278,12 +278,19 @@ void change_to_init()
                 preMain0.loop(now);
                 preMain1.loop(now);
             }
-            Sync::write(LOW);
+
+            LedUtil::debug(10);
             auto doneMsg = reinterpret_cast<const UartDoneMessage *>(msg);
             if (doneMsg->assignedId == nextSlaveId)
                 nextSlaveId = -1;
-            LedUtil::debug(10);
 
+            uart.upgrade_baud_rate(doneMsg->baud_rate);
+            uart.start_receiving();
+            Sync::write(LOW);
+
+            delay(50);
+
+            LedUtil::debug(11);
             internalResetChecker.enable();
             changeToMainTask();
             return true;
@@ -420,27 +427,27 @@ void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
     switch (foreground_mode_)
     {
     case oclock::ForegroundEnum::DebugLeds:
-        ESP_LOGI(TAG, "fg.leds.debugLedLayer");
+        ESP_LOGI(TAG, "fg.leds.debug");
         ledAsync.set_foreground_led_layer(&debugLedLayer());
         return;
 
     case oclock::ForegroundEnum::FollowHandles:
-        ESP_LOGI(TAG, "fg.leds.followHandlesLayer");
+        ESP_LOGI(TAG, "fg.leds.follow");
         ledAsync.set_foreground_led_layer(&followHandlesLayer(false));
         return;
 
     case oclock::ForegroundEnum::None:
-        ESP_LOGI(TAG, "fg.leds.nullptr");
+        ESP_LOGI(TAG, "fg.leds.null");
         ledAsync.set_foreground_led_layer(nullptr);
         return;
 
     case oclock::ForegroundEnum::BrightnessSelector:
-        ESP_LOGI(TAG, "fg.leds.br.sel");
+        ESP_LOGI(TAG, "fg.leds.bright");
         ledAsync.set_foreground_led_layer(&brightnessSelectorLayer());
         break;
 
     case oclock::ForegroundEnum::SpeedSelector:
-        ESP_LOGI(TAG, "fg.leds.speed.sel");
+        ESP_LOGI(TAG, "fg.leds.speed");
         speedLedLayer.set_color(rgba_color(0xFF, 0xFF, 0xFF));
         speedLedLayer.start();
         ledAsync.set_led_layer(&speedLedLayer);
@@ -448,7 +455,7 @@ void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
         break;
 
     default:
-        ESP_LOGI(TAG, "fg.leds.ignored");
+        ESP_LOGI(TAG, "fg.leds.IGN");
         return;
     }
 }

@@ -21,6 +21,7 @@ namespace oclock
 
     class Master
     {
+        uint32_t baud_rate = 9600;
         SlaveConfig slaves_[24];
         BackgroundEnum background_led_mode_{BackgroundEnum::First};
         ForegroundEnum foreground_led_mode_{ForegroundEnum::First};
@@ -47,6 +48,9 @@ namespace oclock
 
         RgbColor get_background_color() const { return background_color_; }
         void set_background_color(const RgbColor &value) { background_color_ = value; }
+
+        void set_baud_rate(uint32_t value) { baud_rate = value; }
+        uint32_t get_baud_rate() const { return baud_rate; }
 
         int get_base_speed() const { return base_speed; }
         void set_base_speed(int value) { base_speed = value; }

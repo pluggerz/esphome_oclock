@@ -36,7 +36,7 @@ class TrackTimeTask final : public AsyncDelay
         AsyncDelay::setup(_);
 
         auto now = tracker.now();
-        ESP_LOGI(TAG, "Now is the time %02d:%02d (%S) note: last_minute=%d", now.hour, now.minute, tracker.name(), last_minute);
+        ESP_LOGI(TAG, "Now is the time %02d:%02d:%02d (%S) note: last_minute=%d", now.hour, now.minute, now.second, tracker.name(), last_minute);
     }
 
     virtual void step() override
@@ -153,6 +153,8 @@ public:
         modes["None"] = ForegroundEnum::None;
         modes["Debug Leds"] = ForegroundEnum::DebugLeds;
         modes["Follow Handles"] = ForegroundEnum::FollowHandles;
+        modes["Brightness Selector"] = ForegroundEnum::BrightnessSelector;
+        modes["Speed Selector"] = ForegroundEnum::SpeedSelector;
     }
 } foreground_led_map;
 
@@ -275,6 +277,13 @@ void text_callback(const std::string &value)
     oclock::time_tracker::testTimeTracker.set(text);
 }
 
+void light_callback()
+{
+    float red, green, blue;
+    oclock::esp_components.light->current_values_as_rgb(&red, &green, &blue);
+    ESP_LOGI(__FUNCTION__, "accept: (%f, %f, %f)", red, green, blue);
+}
+
 #define init(number, callback)                  \
     number->add_on_state_callback(callback);    \
     if (number->has_state())                    \
@@ -288,6 +297,11 @@ void text_callback(const std::string &value)
 
 #define init_select(select, callback) \
     init(select, callback)
+
+#define init_light(light, callback)                         \
+    light->add_new_target_state_reached_callback(callback); \
+    callback();                                             \
+    esphome::delay(1); /* FIX CRC ERRORS */
 
 void update_from_components()
 {
@@ -314,6 +328,8 @@ void update_from_components()
     init(oclock::esp_components.text, text_callback);
     // acctive mode (do finally)
     init_select(oclock::esp_components.active_mode, active_mode_callback);
+    // light
+    init_light(oclock::esp_components.light, light_callback);
 };
 
 #endif

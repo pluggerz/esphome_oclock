@@ -107,9 +107,10 @@ struct UartDoneMessage : public UartMessage
 {
 public:
   uint8_t assignedId;
+  uint32_t baud_rate;
 
 public:
-  UartDoneMessage(uint8_t source_id, uint8_t assignedId) : UartMessage(source_id, MSG_ID_DONE), assignedId(assignedId) {}
+  UartDoneMessage(uint8_t source_id, uint8_t assignedId, uint32_t baud_rate) : UartMessage(source_id, MSG_ID_DONE), assignedId(assignedId), baud_rate(baud_rate) {}
 } __attribute__((packed, aligned(1)));
 
 struct SettingsModeRequest : public UartMessage

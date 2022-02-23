@@ -531,7 +531,11 @@ namespace oclock
             const oclock::EditMode mode;
 
         public:
-            EnterSettingsMode(oclock::EditMode mode) : ExecuteRequest("EnterSettingsMode"), mode(mode) {}
+            EnterSettingsMode(oclock::EditMode mode) : ExecuteRequest("EnterSettingsMode"), mode(mode)
+            {
+                master.set_edit_mode(mode);
+                master.set_in_edit(mode != oclock::EditMode::None);
+            }
 
             virtual void execute() override final
             {

@@ -212,9 +212,6 @@ void MasterLifecycle::change_to_accepting()
         slaveIdCounter = ((UartAcceptMessage *)msg)->getAssignedId();
         ESP_LOGI(TAG, "Done waiting for all slaves: sync=HIGH and slaveIdCounter=%d", slaveIdCounter);
 
-        // send DONE
-        Sync::write(LOW);
-
         // send config
         for (int idx = 0; idx < MAX_SLAVES; ++idx)
         {
@@ -230,14 +227,22 @@ void MasterLifecycle::change_to_accepting()
                                                   s.handles[0].initial_ticks, s.handles[1].initial_ticks);
             uart.send(request);
         }
-        uart.send(UartDoneMessage(-1, slaveIdCounter));
 
+        // send DONE
+        Sync::write(LOW);
+        delay(100);
+        uart.send(UartDoneMessage(-1, slaveIdCounter, master.get_baud_rate()));
         while (Sync::read() == HIGH)
         {
             // wait while slave is high
             ::delay(200);
             ESP_LOGI(TAG, "change_to_accepting: Wating while sync is HIGH...");
         }
+
+        delay(500);
+        uart.upgrade_baud_rate(master.get_baud_rate());
+        delay(100);
+
         // accept errors
         scanForError = true;
         ESP_LOGI(TAG, "change_to_accepting: Sync::read()=%s", Sync::read() ? "HIGH" : "LOW");
@@ -285,12 +290,12 @@ void MasterLifecycle::change_to_broadcasting(oclock::BroadcastRequest *request)
         case MsgType::MSG_DUMP_LOG_REQUEST:
             if (msg->getDstId() == 0xFF)
             {
-                ESP_LOGI(TAG, "Done dumping logs request!");
+                ESP_LOGI(TAG, "Done dumping logs request! > %d", msg->getDstId());
                 FINAL_REQUEST()
             }
             else
             {
-                ESP_LOGI(TAG, "Waiting before umping logs request!");
+                ESP_LOGI(TAG, "Waiting before dumping logs request! > %d", msg->getDstId());
             }
             return true;
 

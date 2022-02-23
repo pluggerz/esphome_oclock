@@ -79,7 +79,7 @@ class Channel
 {
 private:
   bool receiving = false;
-  const long speed{115200};
+  uint32_t baud_rate{1200};
   Gate &gate;
   Protocol *const protocol_;
   void start_transmitting();
@@ -101,6 +101,8 @@ public:
   void skip();
 
   void start_receiving();
+
+  void upgrade_baud_rate(uint32_t value);
 
   template <class M>
   void send(const M &m) { _send(m); }

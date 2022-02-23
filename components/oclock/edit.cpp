@@ -76,8 +76,38 @@ public:
 
 #define H_STEP 15
 
+class TrackColorRequest final : public AsyncDelay
+{
+  RgbColor cur;
+
+  virtual void step() override
+  {
+    const auto col = oclock::master.get_background_color();
+    if (col.red == cur.red && col.green == cur.green && col.blue == cur.blue)
+      return;
+    cur = col;
+
+    int h = col.asH();
+    RgbColorLeds leds;
+    for (int idx = 0; idx < LED_COUNT; ++idx)
+    {
+      int newH = (h + (idx - LED_COUNT / 2) * H_STEP) % 360;
+      if (newH < 0)
+        newH += 360;
+      leds[idx] = oclock::RgbColor::HtoRGB(newH);
+    }
+    oclock::requests::publish_rgb_leds(leds);
+  };
+
+public:
+  TrackColorRequest() : AsyncDelay(30) {}
+};
+
 void publish_settings()
 {
+  if (!master.is_in_edit())
+    return;
+
   AsyncRegister::byName("time_tracker", nullptr);
   const auto &mode = master.get_edit_mode();
 
@@ -90,17 +120,7 @@ void publish_settings()
     oclock::queue(new requests::BackgroundModeSelectRequest(BackgroundEnum::RgbColors));
     oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::None));
 
-    int h = oclock::master.get_background_color().asH();
-    RgbColorLeds leds;
-    for (int idx = 0; idx < LED_COUNT; ++idx)
-    {
-      int newH = (h + (idx - LED_COUNT / 2) * H_STEP) % 360;
-      if (newH < 0)
-        newH += 360;
-      leds[idx] = oclock::RgbColor::HtoRGB(newH);
-    }
-
-    oclock::requests::publish_rgb_leds(leds);
+    AsyncRegister::byName("time_tracker", new TrackColorRequest());
     ESP_LOGI(TAG, "Publishing edit mode: mode=%d/BackgroundColor", mode);
   }
   break;
@@ -139,8 +159,9 @@ void Master::edit_toggle()
   if (value)
   {
     AsyncRegister::byName("time_tracker", nullptr);
-    ESP_LOGI(TAG, "Leaving edit mode");
     oclock::queue(new oclock::requests::EnterSettingsMode(oclock::EditMode::None));
+
+    ESP_LOGI(TAG, "Leaving edit mode");
     publish(esp_components.foreground);
     publish(esp_components.background);
     publish(esp_components.active_mode);
@@ -148,11 +169,11 @@ void Master::edit_toggle()
   else
   {
     const auto &mode = EditMode::Brightness;
-    master.set_edit_mode(mode);
-    ESP_LOGI(TAG, "Changing to edit mode: mode = %d", mode);
+    oclock::queue(new oclock::requests::EnterSettingsMode(mode));
+
+    ESP_LOGI(TAG, "Changing to edit mode: mode = %d ->: %d", mode, master.is_in_edit());
     publish_settings();
   }
-  master.set_in_edit(!value);
 }
 
 void oclock::Master::edit_next()
@@ -160,10 +181,22 @@ void oclock::Master::edit_next()
   if (!master.is_in_edit())
     return;
 
-  auto raw_mode = int(master.get_edit_mode()) + 1;
-  if (raw_mode > int(EditMode::Last))
-    raw_mode = 0;
-  auto mode = EditMode(raw_mode);
+  auto mode = master.get_edit_mode();
+  switch (mode)
+  {
+  case EditMode::Background:
+    mode = master.get_led_background_mode() == BackgroundEnum::SolidColor
+               ? EditMode::BackgroundColor
+               : EditMode::Speed;
+    break;
+
+  default:
+    const int raw_mode = int(mode) + 1;
+    mode = raw_mode > int(EditMode::Last)
+               ? EditMode::First
+               : EditMode(raw_mode);
+    break;
+  }
   master.set_edit_mode(mode);
   ESP_LOGI(TAG, "Changing to edit mode: mode = %d", mode);
   publish_settings();
@@ -261,8 +294,15 @@ void edit_add_value(int direction, bool big)
     int newH = (oclock::master.get_background_color().asH() + direction * H_STEP) % 360;
     if (newH < 0)
       newH += 360;
-    oclock::requests::publish_background_color(oclock::RgbColor::HtoRGB(newH));
-    publish_settings();
+
+    auto l = oclock::esp_components.light;
+    auto color = oclock::RgbColor::HtoRGB(newH);
+    auto call = l->make_call();
+    call.set_transition_length(1);
+    call.set_red(color.red / 255.);
+    call.set_green(color.green / 255.);
+    call.set_blue(color.blue / 255.);
+    call.perform();
   }
   break;
 

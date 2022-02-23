@@ -245,8 +245,9 @@ public:
             return;
         level = new_level;
         auto offColor = rgb_color(0x10, 0x10, 0x10);
-        auto onColor = rgb_color(0, 0, 0xFF);
-        flicker(new_level, onColor, offColor);
+        auto onColor1 = rgb_color(0, 0, 0xFF);
+        auto onColor2 = rgb_color(0, 0xFF, 0x00);
+        flicker(new_level, new_level == 10 ? onColor2 : onColor1, offColor);
         delay(60);
     }
 };
