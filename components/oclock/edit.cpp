@@ -74,7 +74,7 @@ public:
   TrackSpeedTask(EditMode mode) : AsyncDelay(100), mode_(mode) {}
 };
 
-#define H_STEP 15
+#define H_STEP 20
 
 class TrackColorRequest final : public AsyncDelay
 {

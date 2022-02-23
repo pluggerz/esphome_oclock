@@ -75,7 +75,7 @@ public:
 
         // always from the same side, to make sure we stop the same way
         stepper.speed_up = false;
-        stepper.setGhosting(false);
+        stepper.set_ghosting(false);
         stepper.set_speed_in_revs_per_minute(+searchSpeed);
         stepper.sync();
     }

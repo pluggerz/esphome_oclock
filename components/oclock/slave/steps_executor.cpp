@@ -1,5 +1,16 @@
 #include "steps_executor.h"
 
+enum class StepMode
+{
+    // we are speeding up the handle  honour the key request
+    SPEED_UP,
+    // executing key request
+    CLOCKWISE,
+    ANTI_CLOCKWISE,
+    // we are speeding downs because we need to stop or slow down
+    SPEED_DOWN,
+};
+
 class AnimationKeys
 {
 private:
@@ -53,6 +64,7 @@ public:
     AnimationKeys *keysPtr = nullptr;
     uint8_t idx = 0;
     uint8_t turning = 0;
+    StepMode step_mode = StepMode::SPEED_DOWN;
     uint16_t steps = 0;
     bool special = false;
     bool speed_detection = false;
@@ -65,14 +77,14 @@ public:
     void request_stop()
     {
         request_stop_ = true;
-        if (keysPtr == nullptr || special)
+        if (keysPtr == nullptr || stepperPtr == nullptr || special || stepperPtr->is_ghosting())
         {
-            keysPtr = nullptr;
             return;
         }
-        if (speed_up == false && speed_down == false)
+        if (step_mode == StepMode::CLOCKWISE || step_mode == StepMode::ANTI_CLOCKWISE)
         {
-            steps = 0;
+            // actually we do not care what the intended speed was
+            fill_speed_down(step_mode == StepMode::CLOCKWISE, stepperPtr->turn_speed_in_revs_per_minute);
         }
     }
 
@@ -104,7 +116,7 @@ public:
         return speed > stepperPtr->turn_speed_in_revs_per_minute;
     }
 
-    inline bool do_speed_up() __attribute__((always_inline))
+    inline bool needs_speed_up() __attribute__((always_inline))
     {
         if (!speed_detection)
             // ignore
@@ -131,7 +143,7 @@ public:
         return fast_enough(cur_speed);
     }
 
-    inline bool do_speed_down() __attribute__((always_inline))
+    inline bool needs_speed_down() __attribute__((always_inline))
     {
         if (!speed_detection)
             return false;
@@ -156,6 +168,29 @@ public:
             return false;
         // lets check if we need to 'stop'
         return fast_enough(cur_speed);
+    }
+
+    void fill_speed_down(bool clockwise, int speed)
+    {
+        auto &stepper = *stepperPtr;
+
+        step_mode = StepMode::SPEED_DOWN;
+        stepper.set_ghosting(false);
+        stepper.enable_defecting(speed);
+        steps = reverse_steps * STEP_MULTIPLIER;
+        auto turn_speed = stepper.turn_speed_in_revs_per_minute;
+        stepper.set_speed_in_revs_per_minute(clockwise ? turn_speed : -turn_speed);
+    }
+
+    void fill_speed_up(bool clockwise, int speed)
+    {
+        auto &stepper = *stepperPtr;
+
+        step_mode = StepMode::SPEED_UP;
+        stepper.set_ghosting(false);
+        stepper.enable_defecting(speed);
+        steps = reverse_steps * STEP_MULTIPLIER;
+        stepper.set_speed_in_revs_per_minute(clockwise ? speed : -speed, true);
     }
 
     void loop(Micros now)
@@ -209,6 +244,7 @@ public:
         }
         const auto speed = cmd.extended() ? 4 : cmdSpeedUtil.deflate_speed(cmd.inflated_speed());
         const auto clockwise = cmd.clockwise();
+        step_mode = clockwise ? StepMode::CLOCKWISE : StepMode::ANTI_CLOCKWISE;
         if (turning == 0)
         {
             if (request_stop_)
@@ -217,8 +253,8 @@ public:
                 keysPtr = nullptr;
                 return;
             }
-            speed_up = do_speed_up();
-            speed_down = do_speed_down();
+            speed_up = needs_speed_up();
+            speed_down = needs_speed_down();
 #define STEPS keys[idx].value.steps
             if (speed_up && STEPS >= reverse_steps)
                 STEPS -= reverse_steps;
@@ -233,13 +269,10 @@ public:
         }
         if (turning == 3)
         {
-            turning--;
+            turning = 2;
             if (speed_up)
             {
-                stepper.setGhosting(false);
-                stepper.enable_defecting(speed);
-                steps = reverse_steps * STEP_MULTIPLIER;
-                stepper.set_speed_in_revs_per_minute(clockwise ? speed : -speed, true);
+                fill_speed_up(clockwise, speed);
             }
             return;
         }
@@ -248,7 +281,7 @@ public:
             turning--;
             // just execute
             const auto ghosting = cmd.ghost();
-            stepper.setGhosting(ghosting);
+            stepper.set_ghosting(ghosting);
             special = cmd.extended();
             if (special)
             {
@@ -272,16 +305,16 @@ public:
         }
         if (turning == 1)
         {
-            turning--;
+            turning = 0;
 
             // execute
             if (speed_down)
             {
-                stepper.setGhosting(false);
-                stepper.enable_defecting(speed);
-                steps = reverse_steps * STEP_MULTIPLIER;
-                auto turn_speed = stepper.turn_speed_in_revs_per_minute;
-                stepper.set_speed_in_revs_per_minute(clockwise ? turn_speed : -turn_speed);
+                fill_speed_down(clockwise, speed);
+            }
+            else if (request_stop_)
+            {
+                steps = 0;
             }
             idx++;
         }

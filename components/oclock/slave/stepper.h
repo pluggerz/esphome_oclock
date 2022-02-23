@@ -25,8 +25,8 @@ private:
   TrackTime next_step_time = 0;  // expected next time step that we should do a new step
 
 public:
-  TrackTime last_step_time = 0;  // time stamp in micros of when the last step was taken
-  
+  TrackTime last_step_time = 0; // time stamp in micros of when the last step was taken
+
   bool speed_up = false;
 
   bool ghost = false;
@@ -113,7 +113,8 @@ public:
       return v - number_of_steps;
     return v;
   }
-  void setGhosting(bool _ghost) { ghost = _ghost; }
+  inline bool is_ghosting() const { return ghost; }
+  inline void set_ghosting(bool _ghost) { ghost = _ghost; }
 
   inline StepInt ticks() const __attribute__((always_inline)) { return range(step_number - offset_steps_); }
 
@@ -183,8 +184,8 @@ public:
     if (goal == current)
       return goal;
     auto inc = goal - current;
-    //if (abs(inc) < 100)
-    //  return goal;
+    // if (abs(inc) < 100)
+    //   return goal;
     auto ret = current + (inc * multiplier);
     return ret;
   };
@@ -209,7 +210,7 @@ public:
     if (pulsing)
     {
       // pulsing can be very short
-      //bool too_fast = last_step_time < next_step_time;
+      // bool too_fast = last_step_time < next_step_time;
       if (diff < (behind ? pulse_time >> 1 : pulse_time))
       {
         return false;
@@ -236,12 +237,12 @@ public:
     if (speed_up)
     {
       // previous was faster
-      //bool too_fast = last_step_time < next_step_time;
+      // bool too_fast = last_step_time < next_step_time;
       if (step_current < step_on_fail_delay
           // previus was slower
           || step_current > step_delay)
       {
-        step_current = join(step_current, behind ? step_on_fail_delay : step_delay, .3); //step_on_fail_delay;
+        step_current = join(step_current, behind ? step_on_fail_delay : step_delay, .3); // step_on_fail_delay;
       }
       else if (behind)
       {
