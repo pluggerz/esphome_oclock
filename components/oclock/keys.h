@@ -151,7 +151,7 @@ public:
         return speeds[value];
     }
 }
-//TODO: do static :S
+// TODO: do static :S
 extern cmdSpeedUtil;
 
 #ifdef MASTER_MODE
@@ -257,7 +257,7 @@ public:
 
     double time() const
     {
-        return static_cast<double>(fatKey.steps * 60) / static_cast<double>(abs(fatKey.speed)) / static_cast<double>(NUMBER_OF_STEPS);
+        return static_cast<double>(fatKey.steps * 60) / abs(static_cast<double>(fatKey.speed)) / static_cast<double>(NUMBER_OF_STEPS);
     }
 };
 #endif
