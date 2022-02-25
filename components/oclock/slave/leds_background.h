@@ -3,53 +3,15 @@
 #include "leds.h"
 #include "hal.h"
 
-BackgroundLayer &rgbLedLayer(const oclock::RgbColorLeds &leds);
-BackgroundLayer &rgbLedLayer();
+BackgroundLayer &rgbLedBackgroundLayer(const oclock::RgbColor &color);
+BackgroundLayer &rgbLedBackgroundLayer(const oclock::RgbColorLeds &leds);
+BackgroundLayer &rgbLedBackgroundLayer();
 
 namespace BackgroundLedAnimations
 {
     class Off;
-    class Fixed;
     class Xmas;
     class Rainbow;
-};
-
-class BackgroundLedAnimations::Fixed : public BackgroundLayer
-{
-private:
-    rgb_color color = rgb_color(0, 0, 0);
-    bool initialized = false;
-
-public:
-    virtual ~Fixed() {}
-
-    virtual void start() override
-    {
-        LedLayer::start();
-        initialized = false;
-    }
-
-    virtual void combine(Leds &result) const override
-    {
-        for (int idx = 0; idx < LED_COUNT; ++idx)
-            result[idx] = rgba_color(color, brightness);
-    }
-
-    void set_color(const rgba_color &color)
-    {
-        this->brightness = color.alpha;
-        this->color = color;
-        initialized = false;
-    }
-
-    bool update(Millis now) override
-    {
-        if (initialized)
-            return false;
-
-        initialized = true;
-        return true;
-    }
 };
 
 class BackgroundLedAnimations::Xmas : public BackgroundLayer

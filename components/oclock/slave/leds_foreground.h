@@ -5,7 +5,9 @@
 #include "enums.h"
 
 ForegroundLayer &debugLedLayer();
-ForegroundLayer &brightnessSelectorLayer();
+
+ForegroundLayer &rgbLedForegroundLayer(const oclock::RgbColorLeds &leds);
+ForegroundLayer &rgbLedForegroundLayer();
 
 /**
  * @brief
@@ -111,42 +113,6 @@ class FollowHandlesLedLayer : public HighlightLedLayer
     // fill leds
     add_sparkle(longHandlePos);
     add_sparkle(shortHandlePos);
-    return true;
-  }
-};
-
-class SpeedRelatedLedLayer : public HighlightLedLayer
-{
-  bool reverse{false};
-  uint8_t reverse_check_{0};
-
-  virtual bool update_layer(Millis now) override
-  {
-    forced = true;
-
-    // amount of time to do over one round
-    const auto time_in_millis_per_round = 1000;
-
-    // Convert to range [0..MAX_STEPS)
-    int8_t offset = MAX_STEPS * (now % time_in_millis_per_round) / time_in_millis_per_round / 2;
-    uint8_t reverse_check = now / time_in_millis_per_round;
-    if (reverse_check != reverse_check_)
-    {
-      reverse = !reverse;
-      reverse_check_ = reverse_check;
-    }
-
-    clear_all_leds();
-    /* if (reverse) some magic
-    {
-      if (mode_ == oclock::EditMode::TurnSteps)
-        offset = 0;
-      else if (mode_ == oclock::EditMode::TurnSpeed)
-        offset = MAX_STEPS - offset;
-    }*/
-
-    add_sparkle((offset + 0 * MAX_STEPS / 2) % MAX_STEPS);
-    add_sparkle((offset + 1 * MAX_STEPS / 2) % MAX_STEPS);
     return true;
   }
 };

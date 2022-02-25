@@ -14,11 +14,11 @@ namespace oclock
 {
     namespace requests
     {
-        void publish_rgb_leds(const RgbColorLeds &leds);
+        void publish_foreground_rgb_leds(const RgbColorLeds &leds);
+        void publish_background_rgb_leds(const RgbColorLeds &leds);
         void publish_brightness(const int value);
 
-        void publish_background_color(const int component, const float value);
-        void publish_background_color(const RgbColor &color);
+        void publish_background_color_h(int h);
 
         class AnimationRequest : public oclock::BroadcastRequest
         {
@@ -539,7 +539,6 @@ namespace oclock
 
             virtual void execute() override final
             {
-                send(SettingsModeRequest(mode));
             }
         };
 
@@ -555,6 +554,8 @@ namespace oclock
             {
                 // just send latests
                 auto mode = oclock::master.get_led_background_mode();
+                if (mode == BackgroundEnum::SolidColor)
+                    mode = BackgroundEnum::RgbColors;
                 send(LedModeRequest(mode));
             }
         };

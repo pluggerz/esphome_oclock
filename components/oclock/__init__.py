@@ -163,34 +163,16 @@ async def add_number(conf):
     return var
 
 
-async def to_code_light(conf, expression):
-    print(f"conf: {conf}")
-
+async def to_code_light(conf):
     var = cg.new_Pvariable(conf[CONF_ID])
-    cg.add(var.set_listener(expression))
-
-    # await cg.register_component(var, conf)
-
-    # override default min power to 10%
-    # if CONF_MIN_POWER not in config:
-    #    config[CONF_MIN_POWER] = 0.1
     await output.register_output(var, conf)
 
 
 async def to_code(config):
     ligthConf = config[CONF_LIGHT]
-    await to_code_light(ligthConf[CONF_RED],
-                        cg.RawExpression(
-                            "[](float value){ oclock::requests::publish_background_color(0, value); }")
-                        )
-    await to_code_light(ligthConf[CONF_GREEN],
-                        cg.RawExpression(
-                            "[](float value){ oclock::requests::publish_background_color(1, value); }")
-                        )
-    await to_code_light(ligthConf[CONF_BLUE],
-                        cg.RawExpression(
-                            "[](float value){ oclock::requests::publish_background_color(2, value); }")
-                        )
+    await to_code_light(ligthConf[CONF_RED])
+    await to_code_light(ligthConf[CONF_GREEN])
+    await to_code_light(ligthConf[CONF_BLUE])
 
     # https://github.com/esphome/AsyncTCP/blob/master/library.json
     cg.add_library(name="apa102-arduino", version=None,

@@ -5,22 +5,40 @@
 // UartColorMessage uartColorMessage;
 //  UartColorMessage sendUartColorMessage;
 
-class RgbLedColorRequest final : public oclock::ExecuteRequest
+class RgbBackgroundLedsRequest final : public oclock::ExecuteRequest
 {
     oclock::RgbColorLeds leds;
 
     virtual void execute() override
     {
-        send(UartRgbLedsMessage(leds));
+        send(UartRgbBackgroundLedsMessage(leds));
     }
 
 public:
-    RgbLedColorRequest(const oclock::RgbColorLeds &leds) : ExecuteRequest("RgbLedColorRequest"), leds(leds) {}
+    RgbBackgroundLedsRequest(const oclock::RgbColorLeds &leds) : ExecuteRequest("RgbBackgroundLedsRequest"), leds(leds) {}
 };
 
-void oclock::requests::publish_rgb_leds(const oclock::RgbColorLeds &leds)
+class RgbForegroundLedsRequest final : public oclock::ExecuteRequest
 {
-    oclock::queue(new RgbLedColorRequest(leds));
+    oclock::RgbColorLeds leds;
+
+    virtual void execute() override
+    {
+        send(UartRgbForegroundLedsMessage(leds));
+    }
+
+public:
+    RgbForegroundLedsRequest(const oclock::RgbColorLeds &leds) : ExecuteRequest("RgbForegroundLedsRequest"), leds(leds) {}
+};
+
+void oclock::requests::publish_background_rgb_leds(const oclock::RgbColorLeds &leds)
+{
+    oclock::queue(new RgbBackgroundLedsRequest(leds));
+};
+
+void oclock::requests::publish_foreground_rgb_leds(const oclock::RgbColorLeds &leds)
+{
+    oclock::queue(new RgbForegroundLedsRequest(leds));
 };
 
 bool ledColorRequestIsQueued = false;
@@ -28,8 +46,9 @@ class LedColorRequest final : public oclock::ExecuteRequest
 {
     virtual void execute() override
     {
-        auto color = oclock::master.get_background_color();
-        ESP_LOGI(TAG, "send: (r,g,b)=(%02x, %02x, %02x)", color.red, color.green, color.blue);
+        int h = oclock::master.get_background_color_h();
+        auto color = oclock::RgbColor::h_to_rgb(h);
+        ESP_LOGI(TAG, "send: [h](r,g,b)=[%d](%f, %f, %f)", h, color.get_red() / 255.0, color.get_green() / 255.0, color.get_blue() / 255.0);
         send(UartColorMessage(color));
         ledColorRequestIsQueued = false;
     }
@@ -69,29 +88,13 @@ void oclock::requests::publish_brightness(const int value)
         return;
     oclock::queue(new SetScaledBrightnessRequest(value));
 }
-void oclock::requests::publish_background_color(const RgbColor &color)
+
+void oclock::requests::publish_background_color_h(int h)
 {
-    oclock::master.set_background_color(color);
+    auto color = oclock::RgbColor::h_to_rgb(h);
+    oclock::master.set_background_color_h(h);
     if (!ledColorRequestIsQueued)
         oclock::queue(new LedColorRequest(color));
-}
-
-void oclock::requests::publish_background_color(const int component_, const float value_)
-{
-    auto color = oclock::master.get_background_color();
-    uint8_t value = value_ * 0xFF;
-    switch (component_)
-    {
-#define CASE(COMPONENT, FIELD) \
-    case COMPONENT:            \
-        color.FIELD = value;   \
-        break;
-
-        CASE(0, red);
-        CASE(1, green);
-        CASE(2, blue);
-    }
-    publish_background_color(color);
 }
 
 #endif

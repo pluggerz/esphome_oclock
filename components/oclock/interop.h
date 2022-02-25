@@ -32,10 +32,10 @@ enum MsgType
   MSG_SLAVE_CONFIG = 15,
   MSG_BRIGHTNESS = 16,
   MSG_BOOL_DEBUG_LED_LAYER = 17,
-  MSG_SETTINGS_MODE = 18,
   MSG_INFORM_STOP_ANIMATION = 19,
   MSG_WAIT_FOR_ANIMATION = 20,
-  MSG_RGB_LEDS = 21,
+  MSG_FOREGROUND_RGB_LEDS = 21,
+  MSG_BACKGROUND_RGB_LEDS = 22,
 };
 
 struct UartMessage
@@ -67,11 +67,18 @@ public:
   UartBoolMessage(MsgType msgType, bool value) : UartMessage(-1, msgType), value(value) {}
 } __attribute__((packed, aligned(1)));
 
-struct UartRgbLedsMessage : public UartMessage
+struct UartRgbForegroundLedsMessage : public UartMessage
 {
 public:
   oclock::RgbColorLeds leds;
-  UartRgbLedsMessage(const oclock::RgbColorLeds &leds) : UartMessage(-1, MSG_RGB_LEDS), leds(leds) {}
+  UartRgbForegroundLedsMessage(const oclock::RgbColorLeds &leds) : UartMessage(-1, MSG_FOREGROUND_RGB_LEDS), leds(leds) {}
+} __attribute__((packed, aligned(1)));
+
+struct UartRgbBackgroundLedsMessage : public UartMessage
+{
+public:
+  oclock::RgbColorLeds leds;
+  UartRgbBackgroundLedsMessage(const oclock::RgbColorLeds &leds) : UartMessage(-1, MSG_BACKGROUND_RGB_LEDS), leds(leds) {}
 } __attribute__((packed, aligned(1)));
 
 struct UartAcceptMessage : public UartMessage
@@ -111,15 +118,6 @@ public:
 
 public:
   UartDoneMessage(uint8_t source_id, uint8_t assignedId, uint32_t baud_rate) : UartMessage(source_id, MSG_ID_DONE), assignedId(assignedId), baud_rate(baud_rate) {}
-} __attribute__((packed, aligned(1)));
-
-struct SettingsModeRequest : public UartMessage
-{
-  int8_t raw_mode_;
-
-public:
-  SettingsModeRequest(oclock::EditMode mode) : UartMessage(-1, MSG_SETTINGS_MODE), raw_mode_(int8_t(mode)) {}
-  oclock::EditMode get_mode() const { return static_cast<oclock::EditMode>(raw_mode_); }
 } __attribute__((packed, aligned(1)));
 
 struct LedModeRequest : public UartMessage
@@ -193,10 +191,9 @@ public:
 struct UartColorMessage : public UartMessage
 {
 public:
-  // TODO: get rid of brightness?
-  uint8_t red, green, blue, brightness;
+  oclock::RgbColor color;
 
-  UartColorMessage(const oclock::RgbColor &c) : UartMessage(-1, MSG_COLOR), red(c.red), green(c.green), blue(c.blue), brightness(15) {}
+  UartColorMessage(const oclock::RgbColor &c) : UartMessage(-1, MSG_COLOR), color(c) {}
 } __attribute__((packed, aligned(1)));
 
 class InteropStringifier

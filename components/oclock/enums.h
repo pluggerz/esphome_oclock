@@ -11,9 +11,8 @@ namespace oclock
         None = First,
         DebugLeds,
         FollowHandles,
-        BrightnessSelector,
-        SpeedSelector,
         SolidColorSelector,
+        RgbColors,
     };
 
     enum class BackgroundEnum
@@ -65,29 +64,62 @@ namespace oclock
         TrackTestTime,
     };
 
-    enum class EditMode
+    union RgbColor16
     {
-        None = -1,
-        First = 0,
-        Brightness = First,
-        Background,
-        BackgroundColor,
-        Speed,
-        Last = Speed
-    };
+        uint16_t raw;
+        struct
+        {
+            uint16_t red : 5,
+                green : 5,
+                blue : 5,
+                alpha : 1;
+        } rgb;
+    } __attribute__((packed, aligned(1)));
+
+    const int ALPHA_BITS = 3;
+    const int BRIGHTNESS_BITS = 5;
+    const int MAX_ALPHA = (1 << ALPHA_BITS) - 1;
+    const int MAX_BRIGHTNESS = (1 << BRIGHTNESS_BITS) - 1;
 
     struct RgbColor
     {
-    public: // TODO: should be private
+    private: // TODO: should be private
         uint8_t red, green, blue;
+        uint8_t alpha : ALPHA_BITS, brightness : BRIGHTNESS_BITS;
 
     public:
-        RgbColor() : red(0), green(0), blue(0) {}
-        RgbColor(uint8_t r, uint8_t g, uint8_t b) : red(r), green(g), blue(b) {}
+        RgbColor() : red(0), green(0), blue(0), alpha(0), brightness(MAX_BRIGHTNESS) {}
+        RgbColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 0, uint8_t br = MAX_BRIGHTNESS)
+            : red(r),
+              green(g),
+              blue(b),
+              alpha(a),
+              brightness(br) {}
+
+        uint8_t get_alpha() const { return alpha; }
+        void set_alpha(uint8_t value) { alpha = value; }
+
+        uint8_t get_brightness() const { return brightness; }
 
         uint8_t get_red() const { return red; }
+        void set_red(uint8_t value) { red = value; }
+
         uint8_t get_green() const { return green; }
+        void set_green(uint8_t value) { green = value; }
+
         uint8_t get_blue() const { return blue; }
+        void set_blue(uint8_t value) { blue = value; }
+
+        bool invisible() const { return alpha == MAX_ALPHA; }
+
+        friend bool operator==(const RgbColor &l, const RgbColor &r)
+        {
+            return l.red == r.red && l.green == r.green && l.blue == r.blue && l.alpha == r.alpha && l.brightness == r.brightness;
+        }
+        friend bool operator!=(const RgbColor &c1, const RgbColor &c2)
+        {
+            return !(c1 == c2);
+        }
 
     private:
 #ifdef ESP8266
@@ -224,9 +256,15 @@ namespace oclock
         }
 
     public:
-        static RgbColor HtoRGB(float H)
+        static RgbColor h_to_rgb(float H)
         {
-            return HSVtoRGB(H, 1, .5);
+            while (H < 0)
+                H += 360.0;
+
+            while (H > 360.0)
+                H -= 360.0;
+
+            return HSVtoRGB(H, 1., 1.);
         }
 
         static RgbColor HSVtoRGB(float h, float s, float v)
@@ -236,7 +274,7 @@ namespace oclock
             return RgbColor(r * 255, g * 255, b * 255);
         }
 
-        int asH() const
+        int as_h() const
         {
             float r = red / 255., g = green / 255., b = blue / 255.;
             float h = 0.0, s = 0.0, v = 0.0;

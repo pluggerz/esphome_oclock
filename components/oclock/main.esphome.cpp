@@ -7,6 +7,8 @@ using namespace oclock;
 
 oclock::EspComponents oclock::esp_components;
 
+void publish_settings();
+
 template <class V>
 class AbstractMap
 {
@@ -136,13 +138,27 @@ public:
 void background_led_callback(const std::string &mode)
 {
     auto value = background_led_map.find(mode);
-    if (value)
+    if (!value)
     {
+        ESP_LOGE(__FUNCTION__, "NOT FOUND: %s", mode.c_str());
+        return;
+    }
+    switch (*value)
+    {
+    case BackgroundEnum::SolidColor:
+    {
+        oclock::requests::publish_background_color_h(oclock::master.get_background_color_h());
+        oclock::queue(new requests::BackgroundModeSelectRequest(BackgroundEnum::SolidColor));
+        ESP_LOGI(__FUNCTION__, "set to %s (via BackgroundEnum::RgbColors)", mode.c_str());
+    }
+    break;
+
+    default:
+        // resolved by slave
         oclock::queue(new requests::BackgroundModeSelectRequest(*value));
         ESP_LOGI(__FUNCTION__, "set to %s", mode.c_str());
+        break;
     }
-    else
-        ESP_LOGE(__FUNCTION__, "NOT FOUND: %s", mode.c_str());
 }
 
 class ForegroundLedMap : public AbstractMap<ForegroundEnum>
@@ -153,8 +169,7 @@ public:
         modes["None"] = ForegroundEnum::None;
         modes["Debug Leds"] = ForegroundEnum::DebugLeds;
         modes["Follow Handles"] = ForegroundEnum::FollowHandles;
-        modes["Brightness Selector"] = ForegroundEnum::BrightnessSelector;
-        modes["Speed Selector"] = ForegroundEnum::SpeedSelector;
+        modes["Rgb Colors"] = ForegroundEnum::RgbColors;
     }
 } foreground_led_map;
 
@@ -261,6 +276,7 @@ void turn_speed_callback(float value)
 void brightness_callback(float value)
 {
     oclock::requests::publish_brightness(value);
+    publish_settings();
 }
 
 void text_callback(const std::string &value)
@@ -281,7 +297,9 @@ void light_callback()
 {
     float red, green, blue;
     oclock::esp_components.light->current_values_as_rgb(&red, &green, &blue);
-    ESP_LOGI(__FUNCTION__, "accept: (%f, %f, %f)", red, green, blue);
+    auto color = RgbColor(red * 0xFF, green * 0xFF, blue * 0xFF).as_h();
+    oclock::requests::publish_background_color_h(color);
+    ESP_LOGI(__FUNCTION__, "accept:[%d](%f, %f, %f)", color, red, green, blue);
 }
 
 #define init(number, callback)                  \
@@ -307,8 +325,9 @@ void update_from_components()
 {
     RgbColorLeds leds;
     for (int idx = 0; idx < LED_COUNT; ++idx)
-        leds[idx] = oclock::RgbColor::HtoRGB(idx * 30);
-    oclock::requests::publish_rgb_leds(leds);
+        leds[idx] = oclock::RgbColor::h_to_rgb(idx * 30);
+    oclock::requests::publish_background_rgb_leds(leds);
+    oclock::requests::publish_foreground_rgb_leds(leds);
 
     // handles  animation
     init_select(oclock::esp_components.handles_animation, handles_animation_callback);
@@ -330,6 +349,7 @@ void update_from_components()
     init_select(oclock::esp_components.active_mode, active_mode_callback);
     // light
     init_light(oclock::esp_components.light, light_callback);
+    // background
 };
 
 #endif

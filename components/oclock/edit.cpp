@@ -3,6 +3,119 @@
 #ifdef MASTER_MODE
 
 #include "master.h"
+#include "requests.h"
+
+#define H_STEP 30
+
+void fill_leds(oclock::RgbColorLeds &leds, const oclock::RgbColor &color)
+{
+  for (int idx = 0; idx < LED_COUNT; ++idx)
+  {
+    leds[idx] = color;
+  }
+}
+
+class LedLayer
+{
+protected:
+  virtual void start()
+  {
+  }
+
+  virtual bool update(Millis t)
+  {
+    return false;
+  }
+  virtual void combine(oclock::RgbColorLeds &leds) const = 0;
+
+public:
+  virtual ~LedLayer() {}
+
+  void forced_combine(oclock::RgbColorLeds &leds)
+  {
+    start();
+    update(millis());
+    combine(leds);
+  }
+};
+
+class AbstractSettigsLayer : public LedLayer
+{
+  Millis lastTime{0};
+
+  virtual void start() final override { lastTime = 0; }
+
+  virtual bool update(Millis now) override final
+  {
+    if (now - lastTime > 100)
+    {
+      lastTime = now;
+      return true;
+    }
+    return false;
+  }
+
+public:
+  virtual ~AbstractSettigsLayer() {}
+};
+
+class ColorPickerSettingsLayer : public LedLayer
+{
+
+  static int scale_to_brightness(int scaled_brightness_) { return (1 << scaled_brightness_) - 1; }
+
+  virtual void combine(oclock::RgbColorLeds &leds) const override
+  {
+
+    const auto h = oclock::master.get_background_color_h();
+
+    leds[3] = oclock::RgbColor(0, 0, 0);
+
+    leds[4] = oclock::RgbColor::h_to_rgb(h - 4 * H_STEP);
+    leds[5] = oclock::RgbColor::h_to_rgb(h - 3 * H_STEP);
+
+    leds[6] = oclock::RgbColor::h_to_rgb(h - 2 * H_STEP);
+    leds[7] = oclock::RgbColor::h_to_rgb(h - 1 * H_STEP);
+
+    leds[8] = oclock::RgbColor::h_to_rgb(h);
+    leds[9] = oclock::RgbColor::h_to_rgb(h);
+    leds[10] = oclock::RgbColor::h_to_rgb(h);
+
+    leds[11] = oclock::RgbColor::h_to_rgb(h + 1 * H_STEP);
+    leds[0] = oclock::RgbColor::h_to_rgb(h + 2 * H_STEP);
+
+    leds[1] = oclock::RgbColor::h_to_rgb(h + 3 * H_STEP);
+    leds[2] = oclock::RgbColor::h_to_rgb(h + 4 * H_STEP);
+  }
+
+public:
+  virtual ~ColorPickerSettingsLayer() {}
+};
+
+class BrightnessSettingsLayer : public LedLayer
+{
+
+  static int scale_to_brightness(int scaled_brightness_) { return (1 << scaled_brightness_) - 1; }
+
+  virtual void combine(oclock::RgbColorLeds &leds) const override
+  {
+    for (int scaled_brightness = 1; scaled_brightness <= 5; scaled_brightness++)
+    {
+      if (scaled_brightness == oclock::master.get_brightness())
+        leds[(scaled_brightness + 6) % LED_COUNT] = oclock::RgbColor(0x00, 0xFF, 0x00);
+      else
+        leds[(scaled_brightness + 6) % LED_COUNT] = oclock::RgbColor(0xFF, 0xFF, 0xFF);
+    }
+  }
+
+public:
+  virtual ~BrightnessSettingsLayer() {}
+};
+
+BrightnessSettingsLayer brightnessSettingsLayer;
+ColorPickerSettingsLayer colorPickerSettingsLayer;
+
+#include "master.h"
 
 #include "main.esphome.h"
 
@@ -74,33 +187,52 @@ public:
   TrackSpeedTask(EditMode mode) : AsyncDelay(100), mode_(mode) {}
 };
 
-#define H_STEP 20
-
-class TrackColorRequest final : public AsyncDelay
+class TrackBrightnessRequest final : public AsyncDelay
 {
-  RgbColor cur;
+  int current_brightness;
+
+  void follow()
+  {
+    current_brightness = oclock::master.get_brightness();
+    ESP_LOGI(TAG, "TrackBrightnessRequest: current_brightness=%d", current_brightness);
+    oclock::RgbColorLeds leds;
+    brightnessSettingsLayer.forced_combine(leds);
+    oclock::requests::publish_foreground_rgb_leds(leds);
+  }
 
   virtual void step() override
   {
-    const auto col = oclock::master.get_background_color();
-    if (col.red == cur.red && col.green == cur.green && col.blue == cur.blue)
+    if (current_brightness == oclock::master.get_brightness())
       return;
-    cur = col;
-
-    int h = col.asH();
-    RgbColorLeds leds;
-    for (int idx = 0; idx < LED_COUNT; ++idx)
-    {
-      int newH = (h + (idx - LED_COUNT / 2) * H_STEP) % 360;
-      if (newH < 0)
-        newH += 360;
-      leds[idx] = oclock::RgbColor::HtoRGB(newH);
-    }
-    oclock::requests::publish_rgb_leds(leds);
+    follow();
   };
 
 public:
-  TrackColorRequest() : AsyncDelay(30) {}
+  TrackBrightnessRequest() : AsyncDelay(30) { follow(); }
+};
+
+class TrackColorRequest final : public AsyncDelay
+{
+  int current_h = -1;
+
+  void follow()
+  {
+    current_h = oclock::master.get_background_color_h();
+    ESP_LOGI(TAG, "TrackColorRequest: current_h=%d", current_h);
+    oclock::RgbColorLeds leds;
+    colorPickerSettingsLayer.forced_combine(leds);
+    oclock::requests::publish_foreground_rgb_leds(leds);
+  }
+
+  virtual void step() override
+  {
+    if (current_h == oclock::master.get_background_color_h())
+      return;
+    follow();
+  };
+
+public:
+  TrackColorRequest() : AsyncDelay(30) { follow(); }
 };
 
 void publish_settings()
@@ -116,26 +248,27 @@ void publish_settings()
   {
   case EditMode::BackgroundColor:
   {
-    // get current background
-    oclock::queue(new requests::BackgroundModeSelectRequest(BackgroundEnum::RgbColors));
-    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::None));
-
+    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::RgbColors));
     AsyncRegister::byName("time_tracker", new TrackColorRequest());
+
     ESP_LOGI(TAG, "Publishing edit mode: mode=%d/BackgroundColor", mode);
   }
   break;
 
   case EditMode::Brightness:
-    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::BrightnessSelector));
-
+  {
+    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::RgbColors));
+    AsyncRegister::byName("time_tracker", new TrackBrightnessRequest());
     // nothing to do, just make sure we use the original settings
+
     ESP_LOGI(TAG, "Publishing edit mode: mode=%d/Brightness", mode);
     publish(esp_components.background);
-    break;
+  }
+  break;
 
   case EditMode::Speed:
   {
-    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::SpeedSelector));
+    oclock::queue(new requests::ForegroundModeSelectRequest(ForegroundEnum::FollowHandles));
 
     ESP_LOGI(TAG, "Publishing edit mode: mode=%d/Speed or TurnSpeed or TurnSteps", mode);
     // speed
@@ -291,17 +424,17 @@ void edit_add_value(int direction, bool big)
 
   case EditMode::BackgroundColor:
   {
-    int newH = (oclock::master.get_background_color().asH() + direction * H_STEP) % 360;
-    if (newH < 0)
-      newH += 360;
+    int old_h = oclock::master.get_background_color_h();
+    int new_h = (old_h + direction * H_STEP) % 360;
 
-    auto l = oclock::esp_components.light;
-    auto color = oclock::RgbColor::HtoRGB(newH);
-    auto call = l->make_call();
+    auto color = oclock::RgbColor::h_to_rgb(new_h);
+    ESP_LOGI(TAG, "EditMode::BackgroundColor after h=%d -> %d (real: %d)", old_h, new_h, color.as_h());
+
+    auto call = oclock::esp_components.light->make_call();
     call.set_transition_length(1);
-    call.set_red(color.red / 255.);
-    call.set_green(color.green / 255.);
-    call.set_blue(color.blue / 255.);
+    call.set_red(color.get_red() / 255.);
+    call.set_green(color.get_green() / 255.);
+    call.set_blue(color.get_blue() / 255.);
     call.perform();
   }
   break;

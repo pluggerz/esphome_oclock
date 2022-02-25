@@ -6,6 +6,17 @@ typedef unsigned long Millis;
 
 namespace oclock
 {
+    enum class EditMode
+    {
+        None = -1,
+        First = 0,
+        Brightness = First,
+        Background,
+        BackgroundColor,
+        Speed,
+        Last = Speed
+    };
+
     class SlaveConfig
     {
     public:
@@ -25,7 +36,7 @@ namespace oclock
         SlaveConfig slaves_[24];
         BackgroundEnum background_led_mode_{BackgroundEnum::First};
         ForegroundEnum foreground_led_mode_{ForegroundEnum::First};
-        RgbColor background_color_;
+        int background_color_h_ = {0};
         int brightness_{0};
         int base_speed{12};
         ActiveMode active_mode{ActiveMode::None};
@@ -46,8 +57,8 @@ namespace oclock
         ActiveMode get_active_mode() const { return active_mode; }
         void set_active_mode(const ActiveMode &value) { active_mode = value; }
 
-        RgbColor get_background_color() const { return background_color_; }
-        void set_background_color(const RgbColor &value) { background_color_ = value; }
+        int get_background_color_h() const { return background_color_h_; }
+        void set_background_color_h(int value) { background_color_h_ = value; }
 
         void set_baud_rate(uint32_t value) { baud_rate = value; }
         uint32_t get_baud_rate() const { return baud_rate; }

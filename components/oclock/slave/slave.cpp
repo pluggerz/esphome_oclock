@@ -53,18 +53,12 @@ int LedUtil::level = -1;
 
 LedAsync ledAsync;
 
-// background layers
-BackgroundLedAnimations::Fixed backgroundLedLayer;
-BackgroundLedAnimations::Fixed speedLedLayer;
-
-// BackgroundLedAnimations::Fixed offBackgroundLedLayer;
 BackgroundLedAnimations::Xmas xmasLedLayer;
 BackgroundLedAnimations::Rainbow rainbowLedLayer;
 
 #include "slave/leds_foreground.h"
 
 FollowHandlesLedLayer followHandlesLedLayer;
-SpeedRelatedLedLayer settingSpeedLayer;
 
 // can work on top of any layer
 // FollowLightLedLayer followLightLedLayer;
@@ -364,10 +358,16 @@ void do_position_request(const UartMessage *msg)
     uart.start_receiving();
 }
 
-void do_rgb_leds(const UartRgbLedsMessage *msg)
+void do_rgb_leds(const UartRgbBackgroundLedsMessage *msg)
 {
-    rgbLedLayer(msg->leds);
+    rgbLedBackgroundLayer(msg->leds);
     slave_settings.set_background_mode(oclock::BackgroundEnum::RgbColors);
+}
+
+void do_rgb_leds(const UartRgbForegroundLedsMessage *msg)
+{
+    rgbLedForegroundLayer(msg->leds);
+    slave_settings.set_foreground_mode(oclock::ForegroundEnum::RgbColors);
 }
 
 void do_led_background_mode_request(const LedModeRequest *msg)
@@ -382,15 +382,14 @@ void SlaveSettings::set_background_mode(oclock::BackgroundEnum value)
     {
     case oclock::BackgroundEnum::RgbColors:
     {
-        auto &layer = rgbLedLayer();
+        auto &layer = rgbLedBackgroundLayer();
         layer.start();
         ledAsync.set_led_layer(&layer);
         break;
     }
 
     case oclock::BackgroundEnum::SolidColor:
-        backgroundLedLayer.start();
-        ledAsync.set_led_layer(&backgroundLedLayer);
+        ESP_LOGI(TAG, "bg.leds.solidcolor !?");
         break;
 
 #define CASE_XMAS(CASE, WHAT)                                         \
@@ -426,6 +425,15 @@ void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
     foreground_mode_ = value;
     switch (foreground_mode_)
     {
+    case oclock::ForegroundEnum::RgbColors:
+    {
+        ESP_LOGI(TAG, "fg.leds.rgb");
+        auto &layer = rgbLedForegroundLayer();
+        layer.start();
+        ledAsync.set_foreground_led_layer(&layer);
+        break;
+    }
+
     case oclock::ForegroundEnum::DebugLeds:
         ESP_LOGI(TAG, "fg.leds.debug");
         ledAsync.set_foreground_led_layer(&debugLedLayer());
@@ -441,19 +449,6 @@ void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
         ledAsync.set_foreground_led_layer(nullptr);
         return;
 
-    case oclock::ForegroundEnum::BrightnessSelector:
-        ESP_LOGI(TAG, "fg.leds.bright");
-        ledAsync.set_foreground_led_layer(&brightnessSelectorLayer());
-        break;
-
-    case oclock::ForegroundEnum::SpeedSelector:
-        ESP_LOGI(TAG, "fg.leds.speed");
-        speedLedLayer.set_color(rgba_color(0xFF, 0xFF, 0xFF));
-        speedLedLayer.start();
-        ledAsync.set_led_layer(&speedLedLayer);
-        ledAsync.set_foreground_led_layer(&settingSpeedLayer);
-        break;
-
     default:
         ESP_LOGI(TAG, "fg.leds.IGN");
         return;
@@ -468,25 +463,9 @@ void do_led_mode_request(const LedModeRequest *msg)
         do_led_background_mode_request(msg);
 }
 
-// TODO: obsolete?
-void do_settings_mode_request(const SettingsModeRequest *msg)
-{
-    const auto mode = msg->get_mode();
-    switch (mode)
-    {
-    case oclock::EditMode::Speed:
-        break;
-
-    case oclock::EditMode::Brightness:
-    case oclock::EditMode::Background:
-    default:
-        break;
-    }
-}
-
 void do_color_request(const UartColorMessage *msg)
 {
-    backgroundLedLayer.set_color(rgba_color(msg->red, msg->green, msg->blue));
+    rgbLedBackgroundLayer(msg->color);
 }
 
 void do_brightness_request(const UartScaledBrightnessMessage *msg)
@@ -558,12 +537,12 @@ auto uartMainListener = [](const UartMessage *msg)
         do_led_mode_request(reinterpret_cast<const LedModeRequest *>(msg));
         return true;
 
-    case MSG_SETTINGS_MODE:
-        do_settings_mode_request(reinterpret_cast<const SettingsModeRequest *>(msg));
+    case MSG_BACKGROUND_RGB_LEDS:
+        do_rgb_leds(reinterpret_cast<const UartRgbBackgroundLedsMessage *>(msg));
         return true;
 
-    case MSG_RGB_LEDS:
-        do_rgb_leds(reinterpret_cast<const UartRgbLedsMessage *>(msg));
+    case MSG_FOREGROUND_RGB_LEDS:
+        do_rgb_leds(reinterpret_cast<const UartRgbForegroundLedsMessage *>(msg));
         return true;
 
     default:

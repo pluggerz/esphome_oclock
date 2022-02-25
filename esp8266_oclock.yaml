@@ -218,6 +218,7 @@ select:
       - Follow Handles
       - Brightness Selector
       - Speed Selector
+      - Rgb Colors
     initial_option: None
   - platform: template
     id: oclock_background

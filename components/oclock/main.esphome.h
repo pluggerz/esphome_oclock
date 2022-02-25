@@ -15,20 +15,8 @@ namespace oclock
     class LighFloatOutput : public output::FloatOutput
     {
     public:
-        typedef std::function<void(float v)> Listener;
-        Listener listener_;
-
-        void write_state(float state) override
+        virtual void write_state(float state) override
         {
-            if (listener_)
-            {
-                listener_(state);
-            }
-            ESP_LOGI(TAG, "got: state %f", state);
-        }
-        void set_listener(const Listener &value)
-        {
-            listener_ = value;
         }
     };
 

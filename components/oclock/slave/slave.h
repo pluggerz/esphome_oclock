@@ -6,7 +6,6 @@ class SlaveSettings
 {
     oclock::BackgroundEnum background_mode_ = oclock::BackgroundEnum::First;
     oclock::ForegroundEnum foreground_mode_ = oclock::ForegroundEnum::First;
-    oclock::EditMode settings_mode = oclock::EditMode::None;
 
     // 0..5: is managed by the class LedAsync
     int scaled_brightness_ = 5;

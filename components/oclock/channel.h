@@ -79,7 +79,7 @@ class Channel
 {
 private:
   bool receiving = false;
-  uint32_t baud_rate{1200};
+  uint32_t baud_rate{57600};
   Gate &gate;
   Protocol *const protocol_;
   void start_transmitting();
