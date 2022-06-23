@@ -110,6 +110,7 @@ class InternalResetChecker final
         if (Sync::read() == HIGH)
         {
             LedUtil::reset();
+            uart.downgrade_baud_rate();
             change_to_init();
         }
     }
@@ -134,11 +135,132 @@ public:
 
 InternalResetChecker internalResetChecker;
 
-inline void high_prio_work()
+void high_prio_work();
+
+void test_solid_lights(const rgb_color &color)
 {
-    Micros now = micros();
-    preMain0.loop(now);
-    preMain1.loop(now);
+    ledStrip.startFrame();
+    for (auto i = 1; i <= LED_COUNT; i++)
+    {
+        ledStrip.sendColor(color, 31);
+    }
+    ledStrip.endFrame(LED_COUNT);
+}
+
+void test_sync()
+{
+    // make sure we are high
+
+    test_solid_lights(rgb_color(0x00, 0xFF, 0xFF));
+    Sync::write(LOW);
+    Sync::sleep(200);
+
+    // make sure there is enough time for everyone to act
+    test_solid_lights(rgb_color(0xFF, 0x30, 0x10));
+    Sync::write(HIGH);
+    Sync::sleep(200);
+}
+
+void test_send()
+{
+    // receive (BLUE)
+    test_solid_lights(rgb_color(0x00, 0x00, 0xFF));
+    uart.start_receiving();
+    Sync::sleep(1000);
+
+    // send (GREEN)
+    test_solid_lights(rgb_color(0x00, 0xFF, 0x00));
+    uart.start_transmitting();
+    Sync::sleep(1000);
+
+    test_solid_lights(rgb_color(0xFF, 0x00, 0x00));
+    auto msg = UartAcceptMessage(0, 1);
+    uart.send(msg);
+    Sync::sleep(1000);
+}
+
+template <class S>
+void test_stepper(S &s)
+{
+    auto speed = 12;
+
+    s.set_speed_in_revs_per_minute(speed);
+    test_solid_lights(rgb_color(0x00, 0xFF, 0x00));
+    s.step(+NUMBER_OF_STEPS / 4);
+    test_solid_lights(rgb_color(0xFF, 0x00, 0x00));
+    s.step(-NUMBER_OF_STEPS / 4);
+
+    test_solid_lights(rgb_color(0x00, 0x00, 0xFF));
+    delay(500);
+
+    s.step(-NUMBER_OF_STEPS / 6);
+
+    AllSteppers::startCalibrating();
+    while (!s.is_magnet_tick())
+    {
+        test_solid_lights(rgb_color(0xFF, 0x00, 0xFF));
+        delay(50);
+
+        test_solid_lights(rgb_color(0x22, 0x00, 0xFF));
+        delay(50);
+    }
+    AllSteppers::endCalibrating();
+    test_solid_lights(rgb_color(0x00, 0xFF, 0x00));
+    delay(500);
+    s.step(NUMBER_OF_STEPS / 6);
+
+    // find zero
+    test_solid_lights(rgb_color(0xFF, 0xFF, 0x00));
+    delay(500);
+
+    bool found = false;
+    for (int step = 0; step < NUMBER_OF_STEPS; ++step)
+    {
+        s.step(1);
+        if (s.is_magnet_tick())
+        {
+            found = true;
+            break;
+        }
+    }
+
+    for (int step = 0; step < 4; ++step)
+    {
+
+        test_solid_lights(rgb_color(0xFF, 0xFF, 0x00));
+        delay(500);
+
+        test_solid_lights(found ? rgb_color(0x00, 0xFF, 0x00) : rgb_color(0xFF, 0x00, 0x00));
+        delay(500);
+    }
+}
+
+void test_lights_for_color(const rgb_color &color, const rgb_color &back_color)
+{
+    // moving RGB
+    for (auto j = 1; j <= LED_COUNT; j++)
+    {
+        ledStrip.startFrame();
+        for (auto i = 1; i <= LED_COUNT; i++)
+        {
+            if (i <= j)
+                ledStrip.sendColor(color, 31);
+            else
+                ledStrip.sendColor(back_color, 31);
+        }
+        ledStrip.endFrame(LED_COUNT);
+        delay(250);
+    }
+}
+
+void test_lights()
+{
+    // initialize to white
+    test_solid_lights(rgb_color(0xFF, 0xFF, 0xFF));
+    delay(2000);
+    test_lights_for_color(rgb_color(0xFF, 0x00, 0x00), rgb_color(0xFF, 0xFF, 0xFF));
+    test_lights_for_color(rgb_color(0x00, 0xFF, 0x00), rgb_color(0xFF, 0x00, 0x00));
+    test_lights_for_color(rgb_color(0x00, 0x00, 0xFF), rgb_color(0x00, 0xFF, 0x00));
 }
 
 void setup()
@@ -160,6 +282,19 @@ void setup()
 
     // forward the news that we are new ('error')
     Sync::write(HIGH);
+
+    /*
+    while (true)
+   {
+       test_lights();
+       for (int syncs = 0; syncs < 10; ++syncs)
+           test_sync();
+       for (int syncs = 0; syncs < 10; ++syncs)
+           test_send();
+
+       test_stepper(stepper0);
+       test_stepper(stepper1);
+   }*/
 
     change_to_init();
 
@@ -204,7 +339,7 @@ void do_slave_config_request(const UartSlaveConfigRequest *msg)
     change = preMain0.set_initial_ticks(msg->initial_ticks0) || change;
     change = preMain1.set_initial_ticks(msg->initial_ticks1) || change;
 
-    ESP_LOGI(TAG, "handle_offset(%d, %d)",
+    ESP_LOGI(TAG, "handle_off(%d, %d)",
              msg->handle_offset0, msg->handle_offset1);
     ESP_LOGI(TAG, "initial_ticks(%d, %d)",
              msg->initial_ticks0, msg->initial_ticks1);
@@ -389,7 +524,8 @@ void SlaveSettings::set_background_mode(oclock::BackgroundEnum value)
     }
 
     case oclock::BackgroundEnum::SolidColor:
-        ESP_LOGI(TAG, "bg.leds.solidcolor !?");
+        // ignored
+        ESP_LOGI(TAG, "bg.sc");
         break;
 
 #define CASE_XMAS(CASE, WHAT)                                         \
@@ -427,7 +563,7 @@ void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
     {
     case oclock::ForegroundEnum::RgbColors:
     {
-        ESP_LOGI(TAG, "fg.leds.rgb");
+        ESP_LOGI(TAG, "fg.rgb");
         auto &layer = rgbLedForegroundLayer();
         layer.start();
         ledAsync.set_foreground_led_layer(&layer);
@@ -435,22 +571,22 @@ void SlaveSettings::set_foreground_mode(oclock::ForegroundEnum value)
     }
 
     case oclock::ForegroundEnum::DebugLeds:
-        ESP_LOGI(TAG, "fg.leds.debug");
+        ESP_LOGI(TAG, "fg.debug");
         ledAsync.set_foreground_led_layer(&debugLedLayer());
         return;
 
     case oclock::ForegroundEnum::FollowHandles:
-        ESP_LOGI(TAG, "fg.leds.follow");
+        ESP_LOGI(TAG, "fg.follow");
         ledAsync.set_foreground_led_layer(&followHandlesLayer(false));
         return;
 
     case oclock::ForegroundEnum::None:
-        ESP_LOGI(TAG, "fg.leds.null");
+        ESP_LOGI(TAG, "fg.0");
         ledAsync.set_foreground_led_layer(nullptr);
         return;
 
     default:
-        ESP_LOGI(TAG, "fg.leds.IGN");
+        ESP_LOGI(TAG, "fg.IGN");
         return;
     }
 }
@@ -467,6 +603,8 @@ void do_color_request(const UartColorMessage *msg)
 {
     rgbLedBackgroundLayer(msg->color);
 }
+
+void do_calibrate(bool calibrate);
 
 void do_brightness_request(const UartScaledBrightnessMessage *msg)
 {
@@ -503,6 +641,14 @@ auto uartMainListener = [](const UartMessage *msg)
 
     case MsgType::MSG_COLOR:
         do_color_request(reinterpret_cast<const UartColorMessage *>(msg));
+        return true;
+
+    case MsgType::MSG_CALIBRATE_START:
+        do_calibrate(true);
+        return true;
+
+    case MsgType::MSG_CALIBRATE_END:
+        do_calibrate(false);
         return true;
 
     case MsgType::MSG_BEGIN_KEYS:
@@ -556,11 +702,66 @@ void changeToMainTask()
     uart.start_receiving();
 }
 
+bool is_calibrating = false;
+
+enum class LoopMode
+{
+    STEP_EXECUTOR,
+    CALIBRATE_FIND,
+    CALIBRATE_MANUAL
+};
+
+LoopMode loop_mode_ = LoopMode::STEP_EXECUTOR;
+
+inline void high_prio_work(Micros now)
+{
+    if (loop_mode_ == LoopMode::STEP_EXECUTOR)
+    {
+        preMain0.loop(now);
+        preMain1.loop(now);
+    }
+    else if (loop_mode_ == LoopMode::CALIBRATE_FIND)
+    {
+        int goal = NUMBER_OF_STEPS / 2;
+        if (stepper0.ticks() != goal)
+            stepper0.tryToStep(now);
+        if (stepper1.ticks() != goal)
+            stepper1.tryToStep(now);
+        if (stepper0.ticks() == goal && stepper1.ticks() == goal)
+        {
+            loop_mode_ = LoopMode::CALIBRATE_MANUAL;
+            AllSteppers::startCalibrating();
+            ESP_LOGI(TAG, "LM = M");
+        }
+    }
+}
+
+inline void high_prio_work()
+{
+    high_prio_work(micros());
+}
+
+void do_calibrate(bool calibrate)
+{
+    if (calibrate)
+    {
+        stepper0.set_current_speed_in_revs_per_minute(12);
+        stepper1.set_current_speed_in_revs_per_minute(12);
+        loop_mode_ = LoopMode::CALIBRATE_FIND;
+        ESP_LOGI(TAG, "LM = F");
+    }
+    else
+    {
+        loop_mode_ = LoopMode::STEP_EXECUTOR;
+        AllSteppers::endCalibrating();
+        ESP_LOGI(TAG, "LM = ST");
+    }
+}
+
 void loop()
 {
     Micros now = micros();
-    preMain0.loop(now);
-    preMain1.loop(now);
+    high_prio_work(now);
 
     // this way the motors will be able to use speed 64
     uart.loop();
