@@ -1,3 +1,4 @@
+#pragma once
 
 #include "master.h"
 #include "async.h"

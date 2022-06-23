@@ -41,7 +41,7 @@ public:
   bool behind = false;
   SpeedInRevsPerMinuteInt speed_in_revs_per_minute = 1;
 
-  inline bool get_magnet_pin() const __attribute__((always_inline))
+  inline bool get_magnet_pin() const // __attribute__((always_inline))
   {
 #ifdef USE_FAST_GPIO
     return !FastGPIO::Pin<centerPin>::isInputHigh();
@@ -105,26 +105,19 @@ public:
     return v;
   }
 
-  inline StepInt rangeNew(StepInt v) const __attribute__((always_inline))
-  {
-    if (v < 0)
-      return v + number_of_steps;
-    if (v >= number_of_steps)
-      return v - number_of_steps;
-    return v;
-  }
   inline bool is_ghosting() const { return ghost; }
   inline void set_ghosting(bool _ghost) { ghost = _ghost; }
 
   inline StepInt ticks() const __attribute__((always_inline)) { return range(step_number - offset_steps_); }
 
 public:
-  inline void enable_defecting(int expected_speed) __attribute__((always_inline))
+  void enable_defecting(int expected_speed)
   {
     defecting = true;
     defecting_delay = calculate_step_delay(expected_speed) - pulse_time;
   }
-  inline void disable_defecting() __attribute__((always_inline))
+
+  void disable_defecting()
   {
     defecting = false;
   }
@@ -322,7 +315,7 @@ public:
     int ret = abs(60.0 * 1000.0 * 1000L / this->number_of_steps / speed_in_revs_per_minute);
     if (ret < pulse_time)
     {
-      ESP_LOGE(TAG, "TOO FAST !!! speed_in_revs_per_minute=%d", speed_in_revs_per_minute);
+      ESP_LOGE(TAG, "TOO FAST! revs_per_min=%d", speed_in_revs_per_minute);
       return pulse_time;
     }
     return ret;
@@ -362,8 +355,8 @@ public:
 
 #include "pins.h"
 
-typedef Stepper<MOTOR_A_STEP, MOTOR_A_DIR, SLAVE_POS_B> Stepper0;
-typedef Stepper<MOTOR_B_STEP, MOTOR_B_DIR, SLAVE_POS_A> Stepper1;
+typedef Stepper<MOTOR_A_STEP, MOTOR_A_DIR, SLAVE_POS_A> Stepper0;
+typedef Stepper<MOTOR_B_STEP, MOTOR_B_DIR, SLAVE_POS_B> Stepper1;
 
 extern Stepper0 stepper0;
 extern Stepper1 stepper1;

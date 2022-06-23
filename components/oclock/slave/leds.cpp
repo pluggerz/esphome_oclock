@@ -97,16 +97,31 @@ class RgbLedLayer : public BackgroundLayer, public ForegroundLayer
     oclock::RgbColorLeds leds_;
     // Leds leds_;
     Millis lastTime{0};
+    const bool use_brightness;
 
     virtual void combine(Leds &leds) const override
     {
         for (int idx = 0; idx < LED_COUNT; ++idx)
         {
             const auto &led = leds_[idx];
-            if (led.invisible())
-                continue;
-
-            leds[idx] = led;
+            auto relative_brightness = led.get_brightness();
+            if (use_brightness)
+            {
+                if (led.invisible())
+                {
+                    leds[idx].alpha = relative_brightness;
+                    continue;
+                }
+                leds[idx] = led;
+            }
+            else
+            {
+                if (led.invisible())
+                {
+                    continue;
+                }
+                leds[idx] = led;
+            }
         }
     }
 
@@ -121,6 +136,8 @@ class RgbLedLayer : public BackgroundLayer, public ForegroundLayer
     }
 
 public:
+    RgbLedLayer(bool use_brightness) : use_brightness(use_brightness) {}
+
     void set(const oclock::RgbColorLeds &leds)
     {
         for (int idx = 0; idx < LED_COUNT; ++idx)
@@ -139,8 +156,8 @@ public:
     };
 };
 
-RgbLedLayer rgbForegroundLedLayer_;
-RgbLedLayer rgbBackgroundLedLayer_;
+RgbLedLayer rgbForegroundLedLayer_(true);
+RgbLedLayer rgbBackgroundLedLayer_(false);
 
 BackgroundLayer &rgbLedBackgroundLayer(const oclock::RgbColor &color)
 {

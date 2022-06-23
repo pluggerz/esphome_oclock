@@ -116,7 +116,7 @@ public:
         return speed > stepperPtr->turn_speed_in_revs_per_minute;
     }
 
-    inline bool needs_speed_up() __attribute__((always_inline))
+    /*inline*/ bool needs_speed_up() //__attribute__((always_inline))
     {
         if (!speed_detection)
             // ignore
@@ -143,7 +143,7 @@ public:
         return fast_enough(cur_speed);
     }
 
-    inline bool needs_speed_down() __attribute__((always_inline))
+    /*inline*/ bool needs_speed_down() // __attribute__((always_inline))
     {
         if (!speed_detection)
             return false;

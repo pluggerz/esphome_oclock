@@ -105,7 +105,7 @@ public:
 
 class SlaveLogger : public LogExtractor
 {
-    RingBuffer<180> buffer;
+    RingBuffer<160> buffer;
 #define LOG_TMP_BUFFER_SIZE 40
     char output_buffer[LOG_TMP_BUFFER_SIZE];
     bool enabled{true};

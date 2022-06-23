@@ -3,6 +3,8 @@
 
 // Helper class to calucalte CRC8
 
+uint32_t initial_baud_rate{57600};
+
 class CRC8
 {
 public:
@@ -259,7 +261,7 @@ bool Protocol::update()
                 {
                     reset();
                     errorCount_++;
-                    ESP_LOGE(TAG, "bad crc !? (E=%ld)", errorCount_);
+                    ESP_LOGE(TAG, "CRC!? (E=%ld)", errorCount_);
                     break; // bad crc
                 }          // end of bad CRC
 
@@ -277,7 +279,7 @@ bool Protocol::update()
             {
                 reset(); // overflow, start again
                 errorCount_++;
-                ESP_LOGE(TAG, "overflow, start again !? (E=%ld)", errorCount_);
+                ESP_LOGE(TAG, "OVERFLOW !? (E=%ld)", errorCount_);
             }
 
             break;
@@ -288,7 +290,10 @@ bool Protocol::update()
     return false; // not ready yet
 } // end of Protocol::update
 
-Channel::Channel(Gate &gate, Buffer &buffer) : gate(gate), protocol_(new Protocol(gate, buffer))
+Channel::Channel(Gate &gate, Buffer &buffer)
+    : baud_rate(initial_baud_rate),
+      gate(gate),
+      protocol_(new Protocol(gate, buffer))
 {
 }
 
@@ -338,6 +343,11 @@ void Channel::_send(const byte *bytes, const byte length)
         // delay(10);
     }
     protocol_->sendMsg(bytes, length);
+}
+
+void Channel::downgrade_baud_rate()
+{
+    upgrade_baud_rate(initial_baud_rate);
 }
 
 void Channel::upgrade_baud_rate(uint32_t value)

@@ -1,7 +1,7 @@
 #pragma once
 
 /**
- * A tiny version of a sheduler 
+ * A tiny version of a sheduler
  */
 
 // make sure that it matches the the return of micros();
@@ -12,8 +12,8 @@ typedef unsigned long Units;
 class Async
 {
   unsigned char
-     canceled : 1,
-    initialized : 1;
+      canceled : 1,
+      initialized : 1;
 
 protected:
   Async() : canceled(false), initialized(false)

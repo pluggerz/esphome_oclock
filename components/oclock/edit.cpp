@@ -4,6 +4,7 @@
 
 #include "master.h"
 #include "requests.h"
+#include "main.esphome.h"
 
 #define H_STEP 30
 
@@ -34,7 +35,7 @@ public:
   void forced_combine(oclock::RgbColorLeds &leds)
   {
     start();
-    update(millis());
+    update(esphome::millis());
     combine(leds);
   }
 };
@@ -57,9 +58,16 @@ class AbstractSettigsLayer : public LedLayer
 
 public:
   virtual ~AbstractSettigsLayer() {}
+
+  void publish()
+  {
+    oclock::RgbColorLeds leds;
+    this->forced_combine(leds);
+    oclock::requests::publish_foreground_rgb_leds(leds);
+  }
 };
 
-class ColorPickerSettingsLayer : public LedLayer
+class ColorPickerSettingsLayer : public AbstractSettigsLayer
 {
 
   static int scale_to_brightness(int scaled_brightness_) { return (1 << scaled_brightness_) - 1; }
@@ -92,7 +100,7 @@ public:
   virtual ~ColorPickerSettingsLayer() {}
 };
 
-class BrightnessSettingsLayer : public LedLayer
+class BrightnessSettingsLayer : public AbstractSettigsLayer
 {
 
   static int scale_to_brightness(int scaled_brightness_) { return (1 << scaled_brightness_) - 1; }
@@ -112,8 +120,83 @@ public:
   virtual ~BrightnessSettingsLayer() {}
 };
 
+class HighlightLayer
+{
+
+public:
+  uint8_t ledAlphas[LED_COUNT];
+  typedef int Offset;
+
+  // to be able to keep up with the updates MAX_STAPS should not be too great
+  const Offset MAX_STEPS = 12 * 4;
+
+  inline int sparkle(int alpha) __attribute__((always_inline))
+  {
+    return alpha < 24 ? alpha * .6 : alpha;
+  }
+
+  void clear()
+  {
+    memset(ledAlphas, 0, LED_COUNT);
+  }
+
+  void add_sparkle(Offset offset)
+  {
+    offset = oclock::Util::mod_range(offset, MAX_STEPS);
+    double position = (double)LED_COUNT * (double)offset / (double)MAX_STEPS;
+    double weight = 1.0 - (position - floor(position));
+
+    int firstLed = position;
+    if (firstLed == LED_COUNT)
+      firstLed = 0;
+    int secondLed = (firstLed + 1) % LED_COUNT;
+
+    int alpha = oclock::MAX_BRIGHTNESS * weight;
+    ledAlphas[firstLed] |= sparkle(alpha);
+    ledAlphas[secondLed] |= sparkle(oclock::MAX_BRIGHTNESS - alpha);
+  }
+};
+
+class SpeedSettingsLayer : public AbstractSettigsLayer
+{
+
+  virtual void combine(oclock::RgbColorLeds &leds) const override
+  {
+    HighlightLayer highlighLayer;
+
+    // amount of time to do over one round
+    const auto time_in_millis_per_round = 2000;
+    const auto MAX_STEPS = highlighLayer.MAX_STEPS;
+
+    // Convert to range [0..MAX_STEPS/2)
+    auto now = esphome::millis();
+    int8_t offset_slow = MAX_STEPS / 2 * ((1 * now) % (time_in_millis_per_round)) / time_in_millis_per_round;
+    int8_t offset_fast = MAX_STEPS / 2 * ((2 * now) % (time_in_millis_per_round)) / time_in_millis_per_round;
+
+    highlighLayer.clear();
+    const auto &speed = oclock::esp_components.speed;
+    const auto &traits = speed->traits;
+    if (speed->state > traits.get_min_value())
+      highlighLayer.add_sparkle(MAX_STEPS * 3 / 4 - offset_slow);
+    if (speed->state < traits.get_max_value())
+      highlighLayer.add_sparkle(MAX_STEPS * 3 / 4 + offset_fast);
+
+    //
+    for (int idx = 0; idx < LED_COUNT; ++idx)
+    {
+      auto &r = leds[idx];
+      auto relativeBrightness = highlighLayer.ledAlphas[idx];
+      leds[idx] = oclock::RgbColor::from_brightness(relativeBrightness);
+    }
+  }
+
+public:
+  virtual ~SpeedSettingsLayer() {}
+};
+
 BrightnessSettingsLayer brightnessSettingsLayer;
 ColorPickerSettingsLayer colorPickerSettingsLayer;
+SpeedSettingsLayer speedPickerSettingsLayer;
 
 #include "master.h"
 
@@ -171,11 +254,12 @@ class TrackSpeedTask final : public AsyncDelay
 
   virtual void step() override
   {
+    speedPickerSettingsLayer.publish();
     auto base_speed = oclock::master.get_base_speed();
     if (current_base_speed == base_speed && current_turn_speed == Instructions::turn_speed && current_turn_steps == Instructions::turn_steps)
       return;
 
-    esphome::delay(50);
+    // esphome::delay(50);
     current_base_speed = base_speed;
     current_turn_speed = Instructions::turn_speed;
     current_turn_steps = Instructions::turn_steps;
@@ -184,7 +268,7 @@ class TrackSpeedTask final : public AsyncDelay
   };
 
 public:
-  TrackSpeedTask(EditMode mode) : AsyncDelay(100), mode_(mode) {}
+  TrackSpeedTask(EditMode mode) : AsyncDelay(60), mode_(mode) {}
 };
 
 class TrackBrightnessRequest final : public AsyncDelay
@@ -195,9 +279,7 @@ class TrackBrightnessRequest final : public AsyncDelay
   {
     current_brightness = oclock::master.get_brightness();
     ESP_LOGI(TAG, "TrackBrightnessRequest: current_brightness=%d", current_brightness);
-    oclock::RgbColorLeds leds;
-    brightnessSettingsLayer.forced_combine(leds);
-    oclock::requests::publish_foreground_rgb_leds(leds);
+    brightnessSettingsLayer.publish();
   }
 
   virtual void step() override
@@ -219,9 +301,7 @@ class TrackColorRequest final : public AsyncDelay
   {
     current_h = oclock::master.get_background_color_h();
     ESP_LOGI(TAG, "TrackColorRequest: current_h=%d", current_h);
-    oclock::RgbColorLeds leds;
-    colorPickerSettingsLayer.forced_combine(leds);
-    oclock::requests::publish_foreground_rgb_leds(leds);
+    colorPickerSettingsLayer.publish();
   }
 
   virtual void step() override
@@ -285,6 +365,12 @@ void publish_settings()
     break;
   }
 };
+
+void Master::calibrate_toggle()
+{
+  calibrating = !calibrating;
+  oclock::queue(new oclock::requests::CalibrateMode(calibrating));
+}
 
 void Master::edit_toggle()
 {

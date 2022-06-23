@@ -5,6 +5,22 @@ constexpr int LED_COUNT = 12;
 
 namespace oclock
 {
+    struct Util
+    {
+        static int mod_range(int value, int mod)
+        {
+            while (value > mod)
+            {
+                value -= mod;
+            }
+            while (value < 0)
+            {
+                value += mod;
+            }
+            return value;
+        }
+    };
+
     enum class ForegroundEnum
     {
         First = 0,
@@ -95,6 +111,11 @@ namespace oclock
               blue(b),
               alpha(a),
               brightness(br) {}
+
+        static RgbColor from_brightness(int value)
+        {
+            return RgbColor(0xFF, 0xFF, 0xFF, MAX_ALPHA, value);
+        }
 
         uint8_t get_alpha() const { return alpha; }
         void set_alpha(uint8_t value) { alpha = value; }
@@ -256,15 +277,9 @@ namespace oclock
         }
 
     public:
-        static RgbColor h_to_rgb(float H)
+        static RgbColor h_to_rgb(int H)
         {
-            while (H < 0)
-                H += 360.0;
-
-            while (H > 360.0)
-                H -= 360.0;
-
-            return HSVtoRGB(H, 1., 1.);
+            return HSVtoRGB(oclock::Util::mod_range(H, 360), 1., 1.);
         }
 
         static RgbColor HSVtoRGB(float h, float s, float v)

@@ -204,43 +204,43 @@ public:
     switch (type)
     {
     case MSG_ID_RESET:
-      return F("ID_RESET");
+      return F("ID_R");
     case MSG_ID_START:
-      return F("ID_START");
+      return F("ID_S");
     case MSG_ID_ACCEPT:
-      return F("ID_ACCEPT");
+      return F("ID_A");
     case MSG_ID_DONE:
-      return F("ID_DONE");
+      return F("ID_D");
     case MSG_POS_REQUEST:
       return F("POS");
     case MSG_BEGIN_KEYS:
-      return F("BEGIN_KEYS");
+      return F("B_KS");
     case MSG_SEND_KEYS:
-      return F("SEND_KEYS");
+      return F("S_KS");
     case MSG_END_KEYS:
-      return F("END_KEYS");
+      return F("E_KS");
     case MSG_CALIBRATE_START:
-      return F("CALIBRATE_START");
+      return F("C_S");
     case MSG_CALIBRATE_END:
-      return F("CALIBRATE_END");
+      return F("C_E");
     case MSG_COLOR:
-      return F("COLOR");
+      return F("C");
     case MSG_COLOR_ANIMATION:
-      return F("COLOR_ANIMATION");
+      return F("C_A");
     case MSG_LOG:
       return F("LOG");
     case MSG_LED_MODE:
-      return F("LED_MODE");
+      return F("L_M");
     case MSG_DUMP_LOG_REQUEST:
-      return F("DUMP_LOGS");
+      return F("D_L");
     case MSG_SLAVE_CONFIG:
-      return F("CONFIG");
+      return F("C");
     case MSG_INFORM_STOP_ANIMATION:
-      return F("INFORM_STOP_ANIMATION");
+      return F("I_S_A");
     case MSG_WAIT_FOR_ANIMATION:
-      return F("WAIT_FOR_ANIMATION");
+      return F("W_F_A");
     default:
-      return F("MSG_???");
+      return F("MSG?");
     }
   }
 
@@ -389,11 +389,11 @@ protected:
     auto msg = (const UartMessage *)bytes;
     if (msg->getSourceId() == owner_id_)
     {
-      LOG_MESSAGED("ignored (mine)", msg, length);
+      LOG_MESSAGED("IGN (mine)", msg, length);
     }
     else if (!for_me(msg->getDstId())) //(owner_id_ != 0xFF) && (msg->getDstId() != owner_id_) && (msg->getDstId() != ALL_SLAVES))
     {
-      LOG_MESSAGED("ignored (not for me)", msg, length);
+      LOG_MESSAGED("IGN (not for me)", msg, length);
     }
     else
     {
@@ -403,7 +403,7 @@ protected:
         LOG_MESSAGED("do", msg, length);
       bool accepted = listener_ ? listener_(msg) : false;
       if (!accepted)
-        LOG_MESSAGEW("not accepted!?", msg, length);
+        LOG_MESSAGEW("NOT ACCEPT", msg, length);
     }
   }
 
@@ -415,9 +415,9 @@ public:
   void send_raw(const UartMessage *msg, int bytes)
   {
     if (msg->getMsgType() == MsgType::MSG_DUMP_LOG_REQUEST)
-      LOG_MESSAGED("send", msg, bytes);
+      LOG_MESSAGED("S", msg, bytes);
     else
-      LOG_MESSAGEI("send", msg, bytes);
+      LOG_MESSAGEI("S", msg, bytes);
     _send((byte *)msg, bytes);
   }
 

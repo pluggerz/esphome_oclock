@@ -146,7 +146,7 @@ namespace oclock
 
                 if (new_speeds_as_set.size() > cmdSpeedUtil.max_inflated_speed)
                 {
-                    ESP_LOGE(TAG, "Too many speeds to process !? current %d, while max %d",
+                    ESP_LOGE(TAG, "Array!? size=%d, id=%d",
                              new_speeds_as_set.size(), cmdSpeedUtil.max_inflated_speed);
                     return;
                 }
@@ -523,6 +523,19 @@ namespace oclock
             {
                 animationController.reset_handles();
                 send(UartPosRequest(stop_));
+            }
+        };
+
+        class CalibrateMode final : public oclock::ExecuteRequest
+        {
+            const bool calibrate;
+
+        public:
+            CalibrateMode(bool calibrate) : ExecuteRequest(calibrate ? "CalibrateMode(T)" : "CalibrateMode(F)"), calibrate(calibrate) {}
+
+            virtual void execute() override final
+            {
+                send(UartMessage(-1, calibrate ? MsgType::MSG_CALIBRATE_START : MsgType::MSG_CALIBRATE_END));
             }
         };
 

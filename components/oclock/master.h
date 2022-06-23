@@ -41,6 +41,7 @@ namespace oclock
         int base_speed{12};
         ActiveMode active_mode{ActiveMode::None};
 
+        bool calibrating{false};
         bool in_edit{false};
         EditMode edit_mode{EditMode::Brightness};
 
@@ -91,6 +92,7 @@ namespace oclock
         bool is_in_edit() const { return in_edit; }
 
         // edit interactions
+        void calibrate_toggle();
         void edit_toggle();
         void edit_next();
         void edit_plus(bool big = false);

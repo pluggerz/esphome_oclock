@@ -79,9 +79,10 @@ class Channel
 {
 private:
   bool receiving = false;
-  uint32_t baud_rate{57600};
+  uint32_t baud_rate;
   Gate &gate;
   Protocol *const protocol_;
+public: //NOTE: 'start_transmitting' should be private
   void start_transmitting();
 
 protected:
@@ -103,6 +104,7 @@ public:
   void start_receiving();
 
   void upgrade_baud_rate(uint32_t value);
+  void downgrade_baud_rate();
 
   template <class M>
   void send(const M &m) { _send(m); }
