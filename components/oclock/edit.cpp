@@ -210,7 +210,8 @@ void publish(select::Select *select)
 {
   if (!select->has_state())
     return;
-  select->set(select->state);
+  select->make_call().set_option(select->state).perform();
+  // select->set(select->state);
 }
 
 class ShowSpeedAnimationRequest final : public oclock::requests::AnimationRequest
@@ -438,7 +439,8 @@ void publish_next(select::Select *select)
     return;
   if (!select->has_state())
   {
-    select->set(options.front());
+    // select->set(options.front());
+    select->make_call().set_option(options.front()).perform();
     return;
   }
   const auto &state = select->state;
@@ -447,7 +449,8 @@ void publish_next(select::Select *select)
     if (*it == state)
     {
       ++it;
-      select->set(it == options.end() ? options.front() : *it);
+      // select->set(it == options.end() ? options.front() : *it);
+      select->make_call().set_option(it == options.end() ? options.front() : *it).perform();
       return;
     }
   }
@@ -460,7 +463,8 @@ void publish_previous(select::Select *select)
     return;
   if (!select->has_state())
   {
-    select->set(options.back());
+    // select->set(options.back());
+    select->make_call().set_option(options.back()).perform();
     return;
   }
   const auto &state = select->state;
@@ -469,7 +473,8 @@ void publish_previous(select::Select *select)
     if (*it == state)
     {
       ++it;
-      select->set(it == options.rend() ? options.back() : *it);
+      // select->set(it == options.rend() ? options.back() : *it);
+      select->make_call().set_option(it == options.rend() ? options.back() : *it).perform();
       return;
     }
   }
@@ -488,7 +493,8 @@ void edit_add_value(int direction, bool big)
     // update the light via the component:
     auto component = oclock::esp_components.brightness;
     auto brightness = component->state + direction;
-    component->set(brightness);
+    // component->set(brightness);
+    component->make_call().set_value(brightness).perform();
   }
   break;
 
@@ -530,7 +536,8 @@ void edit_add_value(int direction, bool big)
 
     float current = oclock::esp_components.speed->state;
     float next = current + direction * (big ? 4 : 1);
-    oclock::esp_components.speed->set(next);
+    // oclock::esp_components.speed->set(next);
+    oclock::esp_components.speed->make_call().set_value(next).perform();
     ESP_LOGI(TAG, "EditMode::Speed %f -> %f", current, next);
   }
   break;

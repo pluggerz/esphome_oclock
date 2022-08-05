@@ -79,11 +79,11 @@ void oclock::Master::setup()
     ESP_LOGI(TAG, "setup -> scanForError=false, slaveIdCounter=-2");
     ESP_LOGI(TAG, "setup -> Sync::read() = %s", ONOFF(Sync::read()));
 
-    while (true)
+    /*while (true)
     {
         delay(500);
         ESP_LOGI(TAG, "change_to_init -> PAUSE");
-    }
+    }*/
 
     MasterLifecycle::change_to_init();
 }

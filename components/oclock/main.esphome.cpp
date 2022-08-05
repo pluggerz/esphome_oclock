@@ -70,7 +70,7 @@ public:
     }
 } active_mode_map;
 
-void active_mode_callback(const std::string &mode)
+void active_mode_callback(const std::string &mode, size_t idx)
 {
     auto value = active_mode_map.find(mode);
     if (!value)
@@ -135,7 +135,7 @@ public:
     }
 } background_led_map;
 
-void background_led_callback(const std::string &mode)
+void background_led_callback(const std::string &mode, size_t idx)
 {
     auto value = background_led_map.find(mode);
     if (!value)
@@ -173,7 +173,7 @@ public:
     }
 } foreground_led_map;
 
-void foreground_led_callback(const std::string &mode)
+void foreground_led_callback(const std::string &mode, size_t idx)
 {
     auto value = foreground_led_map.find(mode);
     if (value)
@@ -196,7 +196,7 @@ public:
     }
 } handles_animation_map;
 
-void handles_animation_callback(const std::string &mode)
+void handles_animation_callback(const std::string &mode, size_t idx)
 {
     auto value = handles_animation_map.find(mode);
     if (value)
@@ -220,7 +220,7 @@ public:
     }
 } handle_distance_map;
 
-void distance_calculator_callback(const std::string &mode)
+void distance_calculator_callback(const std::string &mode, size_t idx)
 {
     auto value = handle_distance_map.find(mode);
     if (value)
@@ -247,7 +247,7 @@ public:
     }
 } handles_in_between_animation_mode_map;
 
-void handles_in_between_animation_mode_callback(const std::string &mode)
+void handles_in_between_animation_mode_callback(const std::string &mode, size_t idx)
 {
     auto value = handles_in_between_animation_mode_map.find(mode);
     if (value)
@@ -313,8 +313,13 @@ void light_callback()
 #define init_number(number, callback) \
     init(number, callback)
 
-#define init_select(select, callback) \
-    init(select, callback)
+#define init_select(select, callback)           \
+    select->add_on_state_callback(callback);    \
+    if (select->has_state())                    \
+    {                                           \
+        callback(select->state, 0);             \
+        esphome::delay(1); /* FIX CRC ERRORS */ \
+    }
 
 #define init_light(light, callback)                         \
     light->add_new_target_state_reached_callback(callback); \
