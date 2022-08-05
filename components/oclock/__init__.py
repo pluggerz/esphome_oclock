@@ -178,10 +178,10 @@ async def to_code(config):
     cg.add_library(name="apa102-arduino", version=None,
                    repository="pluggerz/apa102-arduino.git")
 
-    if CONF_LOGGER in CORE.config:
-        baudrate = CORE.config[CONF_LOGGER][CONF_BAUD_RATE]
-        if (baudrate != 0):
-            raise cv.Invalid(f"Make sure logger.baudrate = 0 !")
+#    if CONF_LOGGER in CORE.config:
+#        baudrate = CORE.config[CONF_LOGGER][CONF_BAUD_RATE]
+#        if (baudrate != 0):
+#            raise cv.Invalid(f"Make sure logger.baudrate = 0 !")
 
     var = cg.new_Pvariable(config[CONF_ID], config[CONF_COUNT_START])
     if CONF_TIME_ID in config:
