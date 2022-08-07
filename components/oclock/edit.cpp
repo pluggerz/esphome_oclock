@@ -432,54 +432,6 @@ float calc_next(int step, float value)
   return value;
 }
 
-void publish_next(select::Select *select)
-{
-  const auto options = select->traits.get_options();
-  if (!options.size())
-    return;
-  if (!select->has_state())
-  {
-    // select->set(options.front());
-    select->make_call().set_option(options.front()).perform();
-    return;
-  }
-  const auto &state = select->state;
-  for (auto it = options.begin(); it != options.end(); it++)
-  {
-    if (*it == state)
-    {
-      ++it;
-      // select->set(it == options.end() ? options.front() : *it);
-      select->make_call().set_option(it == options.end() ? options.front() : *it).perform();
-      return;
-    }
-  }
-}
-
-void publish_previous(select::Select *select)
-{
-  const auto options = select->traits.get_options();
-  if (!options.size())
-    return;
-  if (!select->has_state())
-  {
-    // select->set(options.back());
-    select->make_call().set_option(options.back()).perform();
-    return;
-  }
-  const auto &state = select->state;
-  for (auto it = options.rbegin(); it != options.rend(); it++)
-  {
-    if (*it == state)
-    {
-      ++it;
-      // select->set(it == options.rend() ? options.back() : *it);
-      select->make_call().set_option(it == options.rend() ? options.back() : *it).perform();
-      return;
-    }
-  }
-}
-
 void edit_add_value(int direction, bool big)
 {
   if (!master.is_in_edit())
@@ -504,11 +456,11 @@ void edit_add_value(int direction, bool big)
     ESP_LOGI(TAG, "EditMode::Background before -> %s", component->state.c_str());
     if (direction > 0)
     {
-      publish_next(component);
+      component->make_call().select_next(true).perform();
     }
     else
     {
-      publish_previous(component);
+      component->make_call().select_previous(true).perform();
     }
     ESP_LOGI(TAG, "EditMode::Background after -> %s", component->state.c_str());
   }
