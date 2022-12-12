@@ -175,8 +175,8 @@ async def to_code(config):
     await to_code_light(ligthConf[CONF_BLUE])
 
     # https://github.com/esphome/AsyncTCP/blob/master/library.json
-    cg.add_library(name="apa102-arduino", version=None,
-                   repository="pluggerz/apa102-arduino.git")
+#    cg.add_library(name="apa102-arduino", version=None,
+#                   repository="pluggerz/apa102-arduino.git")
 
 #    if CONF_LOGGER in CORE.config:
 #        baudrate = CORE.config[CONF_LOGGER][CONF_BAUD_RATE]
